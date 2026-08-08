@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Received Stock | Stock Ledger</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="received">
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Inventory records</p>
+          <h1>Stock Received</h1>
+        </div>
+        <nav class="main-nav" aria-label="Main menu">
+          <a class="nav-link" href="dashboard.html">Dashboard</a>
+          <a class="nav-link active" href="received.html">Received</a>
+          <a class="nav-link" href="issued.html">Issued</a>
+          <a class="nav-link" href="history.html">History</a>
+        </nav>
+      </header>
+
+      <main>
+        <section id="editFormPanel" class="panel hidden">
+          <div class="section-header">
+            <h2>Edit received stock</h2>
+          </div>
+
+          <form id="editForm">
+            <input id="editEntryId" type="hidden" />
+            <input id="editMode" type="hidden" value="received" />
+
+            <div class="field-row">
+              <label>
+                Product name
+                <input id="editProduct" type="text" required />
+              </label>
+
+              <label>
+                Type
+                <select id="editType">
+                  <option value="received">Received from vendor</option>
+                  <option value="issued">Issued to person</option>
+                  <option value="adjustment">Adjustment</option>
+                </select>
+              </label>
+
+              <label>
+                Vendor / Person
+                <input id="editCounterparty" type="text" />
+              </label>
+            </div>
+
+            <div class="field-row">
+              <label>
+                Quantity
+                <input id="editQuantity" type="number" min="1" step="1" required />
+              </label>
+
+              <label>
+                Unit price (PKR)
+                <input id="editUnitPrice" type="number" min="0" step="0.01" value="0" />
+              </label>
+
+              <label>
+                Date
+                <input id="editDate" type="date" required />
+              </label>
+            </div>
+
+            <div class="field-row">
+              <label>
+                Adjustment
+                <select id="editAdjustmentDirection">
+                  <option value="increase">Increase stock</option>
+                  <option value="decrease">Decrease stock</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Notes
+              <textarea id="editNote" rows="3"></textarea>
+            </label>
+
+            <div class="form-actions">
+              <button type="button" id="cancelEditBtn" class="secondary">Cancel</button>
+              <button type="submit" class="primary">Update record</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="section-header">
+            <h2>Received stock</h2>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Product</th>
+                  <th>Qty</th>
+                  <th>Price</th>
+                  <th>Vendor</th>
+                  <th>Notes</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="receivedTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

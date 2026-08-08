@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>History | Stock Ledger</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-page="history">
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Audit log</p>
+          <h1>Stock History</h1>
+        </div>
+        <nav class="main-nav" aria-label="Main menu">
+          <a class="nav-link" href="dashboard.html">Dashboard</a>
+          <a class="nav-link" href="received.html">Received</a>
+          <a class="nav-link" href="issued.html">Issued</a>
+          <a class="nav-link active" href="history.html">History</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="panel">
+          <div class="section-header">
+            <h2>Complete record history</h2>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Product</th>
+                  <th>Type</th>
+                  <th>Qty</th>
+                  <th>Price</th>
+                  <th>Vendor / Person</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
