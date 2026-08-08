@@ -1,5 +1,4 @@
-const STORAGE_KEY = 'stock-ledger-app-v1';
-
+﻿const STORAGE_KEY = 'stockLedgerEntries_v3';
 const form = document.getElementById('dashboardForm');
 const typeSelect = document.getElementById('movementType');
 const counterpartyLabel = document.getElementById('counterpartyLabel');
@@ -26,51 +25,29 @@ function loadEntries() {
 
   if (!saved) {
     const seedEntries = [
-      {
-        id: crypto.randomUUID(),
-        product: 'Tag',
-        type: 'received',
-        quantity: 120,
-        unitPrice: 0.4,
-        date: '2026-08-01',
-        counterparty: 'ABC Supplies',
-        note: 'Vendor receipt',
-        adjustmentDirection: 'increase'
-      },
-      {
-        id: crypto.randomUUID(),
-        product: 'Tag',
-        type: 'issued',
-        quantity: 32,
-        unitPrice: 0.6,
-        date: '2026-08-04',
-        counterparty: 'David',
-        note: 'Issued to production team',
-        adjustmentDirection: 'decrease'
-      },
-      {
-        id: crypto.randomUUID(),
-        product: 'Box',
-        type: 'received',
-        quantity: 50,
-        unitPrice: 1.2,
-        date: '2026-08-02',
-        counterparty: 'Metro Packaging',
-        note: 'Boxes received for dispatch',
-        adjustmentDirection: 'increase'
-      },
-      {
-        id: crypto.randomUUID(),
-        product: 'Box',
-        type: 'issued',
-        quantity: 18,
-        unitPrice: 1.6,
-        date: '2026-08-06',
-        counterparty: 'Pritam',
-        note: 'Issue for dispatch team',
-        adjustmentDirection: 'decrease'
-      }
-    ];
+  {
+    id: crypto.randomUUID(),
+    product: '60X40X40',
+    type: 'adjustment',
+    quantity: 100,
+    unitPrice: 0,
+    date: '2026-08-08',
+    counterparty: '',
+    note: 'Opening stock',
+    adjustmentDirection: 'increase'
+  },
+  {
+    id: crypto.randomUUID(),
+    product: 'Opening Stock',
+    type: 'adjustment',
+    quantity: 250,
+    unitPrice: 0,
+    date: '2026-08-08',
+    counterparty: '',
+    note: 'Opening stock',
+    adjustmentDirection: 'increase'
+  }
+];
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(seedEntries));
     return seedEntries;
@@ -279,8 +256,8 @@ function renderReceivedTable() {
         <td>${escapeHtml(entry.product)}</td>
         <td>+${entry.quantity}</td>
         <td>${formatCurrency(entry.unitPrice)}</td>
-        <td>${escapeHtml(entry.counterparty || '—')}</td>
-        <td>${escapeHtml(entry.note || '—')}</td>
+        <td>${escapeHtml(entry.counterparty || 'â€”')}</td>
+        <td>${escapeHtml(entry.note || 'â€”')}</td>
         <td>
           <div class="action-group">
             <button class="secondary small-btn edit-btn" data-id="${entry.id}" type="button">Edit</button>
@@ -324,8 +301,8 @@ function renderIssuedTable() {
         <td>${escapeHtml(entry.product)}</td>
         <td>-${entry.quantity}</td>
         <td>${formatCurrency(entry.unitPrice)}</td>
-        <td>${escapeHtml(entry.counterparty || '—')}</td>
-        <td>${escapeHtml(entry.note || '—')}</td>
+        <td>${escapeHtml(entry.counterparty || 'â€”')}</td>
+        <td>${escapeHtml(entry.note || 'â€”')}</td>
         <td>
           <div class="action-group">
             <button class="secondary small-btn edit-btn" data-id="${entry.id}" type="button">Edit</button>
@@ -441,8 +418,8 @@ function renderHistoryTable() {
         <td>${escapeHtml(entry.type)}</td>
         <td>${entry.type === 'issued' ? '-' : '+'}${entry.quantity}</td>
         <td>${formatCurrency(entry.unitPrice)}</td>
-        <td>${escapeHtml(entry.counterparty || '—')}</td>
-        <td>${escapeHtml(entry.note || '—')}</td>
+        <td>${escapeHtml(entry.counterparty || 'â€”')}</td>
+        <td>${escapeHtml(entry.note || 'â€”')}</td>
       </tr>
     `)
     .join('');
@@ -553,3 +530,4 @@ if (dateInput) dateInput.value = getTodayString();
 if (typeSelect) toggleFields();
 bindEditForm();
 render();
+

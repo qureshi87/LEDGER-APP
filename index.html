@@ -3,49 +3,74 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Stock Ledger App</title>
+    <title>Stock Ledger</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
+
   <body>
     <div class="app-shell">
+
       <header class="topbar">
         <div>
           <p class="eyebrow">Inventory dashboard</p>
           <h1>Stock Ledger</h1>
         </div>
-        <button id="seedButton" class="secondary" type="button">Load demo data</button>
       </header>
 
+      <nav class="main-nav">
+        <a href="index.html" class="active">Dashboard</a>
+        <a href="received.html">Received</a>
+        <a href="issued.html">Issued</a>
+        <a href="history.html">History</a>
+      </nav>
+
       <main>
+
+        <!-- Inventory Summary -->
         <section class="stats-grid" aria-label="Inventory summary">
+
           <article class="stat-card">
             <span>Inventory value</span>
-            <strong id="inventoryValue">$0.00</strong>
+            <strong id="inventoryValue">PKR 0</strong>
           </article>
+
           <article class="stat-card">
             <span>Items in stock</span>
-            <strong id="itemsInStock">0</strong>
+            <strong id="itemsInStock">350</strong>
           </article>
+
           <article class="stat-card">
             <span>Received value</span>
-            <strong id="purchaseCost">$0.00</strong>
+            <strong id="purchaseCost">PKR 0</strong>
           </article>
+
           <article class="stat-card">
             <span>Issued value</span>
-            <strong id="salesRevenue">$0.00</strong>
+            <strong id="salesRevenue">PKR 0</strong>
           </article>
+
         </section>
 
+        <!-- Add Stock Movement -->
         <section class="panel">
+
           <div class="section-header">
             <h2>Add stock movement</h2>
           </div>
 
           <form id="ledgerForm">
+
             <div class="field-row">
+
               <label>
                 Product name
-                <input id="product" name="product" type="text" placeholder="e.g. Tag, Box, Paper" required />
+                <input
+                  id="product"
+                  name="product"
+                  type="text"
+                  placeholder="e.g. 60X40X40"
+                  required
+                />
               </label>
 
               <label>
@@ -59,7 +84,12 @@
 
               <label id="counterpartyLabel">
                 Vendor name
-                <input id="counterparty" name="counterparty" type="text" placeholder="e.g. ABC Supplies" />
+                <input
+                  id="counterparty"
+                  name="counterparty"
+                  type="text"
+                  placeholder="e.g. ABC Supplies"
+                />
               </label>
 
               <label id="adjustmentWrap" class="hidden">
@@ -69,43 +99,79 @@
                   <option value="decrease">Decrease stock</option>
                 </select>
               </label>
+
             </div>
 
             <div class="field-row">
+
               <label>
                 Quantity
-                <input id="quantity" name="quantity" type="number" min="1" step="1" value="1" required />
+                <input
+                  id="quantity"
+                  name="quantity"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value="1"
+                  required
+                />
               </label>
 
               <label>
                 Unit price
-                <input id="unitPrice" name="unitPrice" type="number" min="0" step="0.01" value="0" />
+                <input
+                  id="unitPrice"
+                  name="unitPrice"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                />
               </label>
 
               <label>
                 Date
-                <input id="date" name="date" type="date" required />
+                <input
+                  id="date"
+                  name="date"
+                  type="date"
+                  required
+                />
               </label>
+
             </div>
 
             <label>
               Notes
-              <textarea id="note" name="note" rows="3" placeholder="Optional notes about this transaction"></textarea>
+              <textarea
+                id="note"
+                name="note"
+                rows="3"
+                placeholder="Optional notes about this transaction"
+              ></textarea>
             </label>
 
             <div class="form-actions">
-              <button type="submit" class="primary">Save transaction</button>
+              <button type="submit" class="primary">
+                Save transaction
+              </button>
             </div>
+
           </form>
+
         </section>
 
+        <!-- Current Stock -->
         <section class="panel">
+
           <div class="section-header">
             <h2>Dashboard - current stock live status</h2>
           </div>
 
           <div class="table-wrap">
+
             <table>
+
               <thead>
                 <tr>
                   <th>Product</th>
@@ -114,57 +180,33 @@
                   <th>Stock value</th>
                 </tr>
               </thead>
-              <tbody id="stockTableBody"></tbody>
-            </table>
-          </div>
-        </section>
 
-        <section class="panel">
-          <div class="section-header">
-            <h2>Stock received</h2>
-          </div>
+              <tbody id="stockTableBody">
 
-          <div class="table-wrap">
-            <table>
-              <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Product</th>
-                  <th>Qty</th>
-                  <th>Price</th>
-                  <th>Vendor</th>
-                  <th>Notes</th>
-                  <th>Action</th>
+                  <td>60X40X40</td>
+                  <td>100</td>
+                  <td>PKR 0</td>
+                  <td>PKR 0</td>
                 </tr>
-              </thead>
-              <tbody id="receivedTableBody"></tbody>
-            </table>
-          </div>
-        </section>
 
-        <section class="panel">
-          <div class="section-header">
-            <h2>Stock issued</h2>
-          </div>
-
-          <div class="table-wrap">
-            <table>
-              <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Product</th>
-                  <th>Qty</th>
-                  <th>Price</th>
-                  <th>Person</th>
-                  <th>Notes</th>
-                  <th>Action</th>
+                  <td>350</td>
+                  <td>250</td>
+                  <td>PKR 0</td>
+                  <td>PKR 0</td>
                 </tr>
-              </thead>
-              <tbody id="issuedTableBody"></tbody>
+
+              </tbody>
+
             </table>
+
           </div>
+
         </section>
+
       </main>
+
     </div>
 
     <script src="app.js"></script>
