@@ -1,214 +1,433 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Stock Ledger</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
 
-  <body>
-    <div class="app-shell">
+<head>
+  <meta charset="UTF-8" />
 
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Inventory dashboard</p>
-          <h1>Stock Ledger</h1>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <title>Stock Ledger</title>
+
+  <link
+    rel="stylesheet"
+    href="./styles.css"
+  />
+</head>
+
+<body>
+
+  <div class="app-shell">
+
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+
+    <header class="topbar">
+
+      <div>
+
+        <p class="eyebrow">
+          Inventory dashboard
+        </p>
+
+        <h1>
+          Stock Ledger
+        </h1>
+
+      </div>
+
+    </header>
+
+
+    <!-- =====================================================
+         NAVIGATION
+    ====================================================== -->
+
+    <nav class="main-nav">
+
+      <a
+        href="./index.html"
+        class="active"
+      >
+        Dashboard
+      </a>
+
+      <a href="./received.html">
+        Received
+      </a>
+
+      <a href="./issued.html">
+        Issued
+      </a>
+
+      <a href="./history.html">
+        History
+      </a>
+
+    </nav>
+
+
+    <!-- =====================================================
+         MAIN CONTENT
+    ====================================================== -->
+
+    <main>
+
+      <!-- ===================================================
+           INVENTORY SUMMARY
+      ==================================================== -->
+
+      <section
+        class="stats-grid"
+        aria-label="Inventory summary"
+      >
+
+        <article class="stat-card">
+
+          <span>
+            Inventory value
+          </span>
+
+          <strong id="inventoryValue">
+            PKR 0
+          </strong>
+
+        </article>
+
+
+        <article class="stat-card">
+
+          <span>
+            Items in stock
+          </span>
+
+          <strong id="itemsInStock">
+            0
+          </strong>
+
+        </article>
+
+
+        <article class="stat-card">
+
+          <span>
+            Received value
+          </span>
+
+          <strong id="purchaseCost">
+            PKR 0
+          </strong>
+
+        </article>
+
+
+        <article class="stat-card">
+
+          <span>
+            Issued value
+          </span>
+
+          <strong id="salesRevenue">
+            PKR 0
+          </strong>
+
+        </article>
+
+      </section>
+
+
+      <!-- ===================================================
+           ADD STOCK MOVEMENT
+      ==================================================== -->
+
+      <section class="panel">
+
+        <div class="section-header">
+
+          <h2>
+            Add stock movement
+          </h2>
+
         </div>
-      </header>
 
-      <nav class="main-nav">
-        <a href="index.html" class="active">Dashboard</a>
-        <a href="received.html">Received</a>
-        <a href="issued.html">Issued</a>
-        <a href="history.html">History</a>
-      </nav>
 
-      <main>
+        <form id="ledgerForm">
 
-        <!-- Inventory Summary -->
-        <section class="stats-grid" aria-label="Inventory summary">
+          <div class="field-row">
 
-          <article class="stat-card">
-            <span>Inventory value</span>
-            <strong id="inventoryValue">PKR 0</strong>
-          </article>
-
-          <article class="stat-card">
-            <span>Items in stock</span>
-            <strong id="itemsInStock">350</strong>
-          </article>
-
-          <article class="stat-card">
-            <span>Received value</span>
-            <strong id="purchaseCost">PKR 0</strong>
-          </article>
-
-          <article class="stat-card">
-            <span>Issued value</span>
-            <strong id="salesRevenue">PKR 0</strong>
-          </article>
-
-        </section>
-
-        <!-- Add Stock Movement -->
-        <section class="panel">
-
-          <div class="section-header">
-            <h2>Add stock movement</h2>
-          </div>
-
-          <form id="ledgerForm">
-
-            <div class="field-row">
-
-              <label>
-                Product name
-                <input
-                  id="product"
-                  name="product"
-                  type="text"
-                  placeholder="e.g. 60X40X40"
-                  required
-                />
-              </label>
-
-              <label>
-                Transaction type
-                <select id="type" name="type">
-                  <option value="received">Received from vendor</option>
-                  <option value="issued">Issued to person</option>
-                  <option value="adjustment">Adjustment</option>
-                </select>
-              </label>
-
-              <label id="counterpartyLabel">
-                Vendor name
-                <input
-                  id="counterparty"
-                  name="counterparty"
-                  type="text"
-                  placeholder="e.g. ABC Supplies"
-                />
-              </label>
-
-              <label id="adjustmentWrap" class="hidden">
-                Adjustment
-                <select id="adjustmentDirection" name="adjustmentDirection">
-                  <option value="increase">Increase stock</option>
-                  <option value="decrease">Decrease stock</option>
-                </select>
-              </label>
-
-            </div>
-
-            <div class="field-row">
-
-              <label>
-                Quantity
-                <input
-                  id="quantity"
-                  name="quantity"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value="1"
-                  required
-                />
-              </label>
-
-              <label>
-                Unit price
-                <input
-                  id="unitPrice"
-                  name="unitPrice"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value="0"
-                />
-              </label>
-
-              <label>
-                Date
-                <input
-                  id="date"
-                  name="date"
-                  type="date"
-                  required
-                />
-              </label>
-
-            </div>
+            <!-- PRODUCT -->
 
             <label>
-              Notes
-              <textarea
-                id="note"
-                name="note"
-                rows="3"
-                placeholder="Optional notes about this transaction"
-              ></textarea>
+
+              Product name
+
+              <input
+                id="product"
+                name="product"
+                type="text"
+                placeholder="e.g. 60X40X40"
+                autocomplete="off"
+                required
+              />
+
             </label>
 
-            <div class="form-actions">
-              <button type="submit" class="primary">
-                Save transaction
-              </button>
-            </div>
 
-          </form>
+            <!-- TRANSACTION TYPE -->
 
-        </section>
+            <label>
 
-        <!-- Current Stock -->
-        <section class="panel">
+              Transaction type
 
-          <div class="section-header">
-            <h2>Dashboard - current stock live status</h2>
+              <select
+                id="type"
+                name="type"
+              >
+
+                <option value="received">
+                  Received from vendor
+                </option>
+
+                <option value="issued">
+                  Issued to person
+                </option>
+
+                <option value="adjustment">
+                  Adjustment
+                </option>
+
+              </select>
+
+            </label>
+
+
+            <!-- COUNTERPARTY -->
+
+            <label id="counterpartyLabel">
+
+              Vendor name
+
+              <input
+                id="counterparty"
+                name="counterparty"
+                type="text"
+                placeholder="e.g. ABC Supplies"
+                autocomplete="off"
+              />
+
+            </label>
+
+
+            <!-- ADJUSTMENT -->
+
+            <label
+              id="adjustmentWrap"
+              class="hidden"
+            >
+
+              Adjustment
+
+              <select
+                id="adjustmentDirection"
+                name="adjustmentDirection"
+              >
+
+                <option value="increase">
+                  Increase stock
+                </option>
+
+                <option value="decrease">
+                  Decrease stock
+                </option>
+
+              </select>
+
+            </label>
+
           </div>
 
-          <div class="table-wrap">
 
-            <table>
+          <!-- =================================================
+               QUANTITY / PRICE / DATE
+          ================================================== -->
 
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Qty in stock</th>
-                  <th>Avg cost</th>
-                  <th>Stock value</th>
-                </tr>
-              </thead>
+          <div class="field-row">
 
-              <tbody id="stockTableBody">
+            <!-- QUANTITY -->
 
-                <tr>
-                  <td>60X40X40</td>
-                  <td>100</td>
-                  <td>PKR 0</td>
-                  <td>PKR 0</td>
-                </tr>
+            <label>
 
-                <tr>
-                  <td>350</td>
-                  <td>250</td>
-                  <td>PKR 0</td>
-                  <td>PKR 0</td>
-                </tr>
+              Quantity
 
-              </tbody>
+              <input
+                id="quantity"
+                name="quantity"
+                type="number"
+                min="1"
+                step="1"
+                value="1"
+                required
+              />
 
-            </table>
+            </label>
+
+
+            <!-- UNIT PRICE -->
+
+            <label>
+
+              Unit price
+
+              <input
+                id="unitPrice"
+                name="unitPrice"
+                type="number"
+                min="0"
+                step="0.01"
+                value="0"
+              />
+
+            </label>
+
+
+            <!-- DATE -->
+
+            <label>
+
+              Date
+
+              <input
+                id="date"
+                name="date"
+                type="date"
+                required
+              />
+
+            </label>
 
           </div>
 
-        </section>
 
-      </main>
+          <!-- =================================================
+               NOTES
+          ================================================== -->
 
-    </div>
+          <label>
 
-    <script src="app.js"></script>
-  </body>
+            Notes
+
+            <textarea
+              id="note"
+              name="note"
+              rows="3"
+              placeholder="Optional notes about this transaction"
+            ></textarea>
+
+          </label>
+
+
+          <!-- =================================================
+               SAVE BUTTON
+          ================================================== -->
+
+          <div class="form-actions">
+
+            <button
+              type="submit"
+              class="primary"
+            >
+              Save transaction
+            </button>
+
+          </div>
+
+        </form>
+
+      </section>
+
+
+      <!-- ===================================================
+           CURRENT STOCK
+      ==================================================== -->
+
+      <section class="panel">
+
+        <div class="section-header">
+
+          <h2>
+            Dashboard - current stock live status
+          </h2>
+
+        </div>
+
+
+        <div class="table-wrap">
+
+          <table>
+
+            <thead>
+
+              <tr>
+
+                <th>
+                  Product
+                </th>
+
+                <th>
+                  Qty in stock
+                </th>
+
+                <th>
+                  Avg cost
+                </th>
+
+                <th>
+                  Stock value
+                </th>
+
+              </tr>
+
+            </thead>
+
+
+            <tbody id="stockTableBody">
+
+              <!-- Stock data will be loaded by app.js -->
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+
+  <!-- =====================================================
+       SUPABASE
+       LOAD ONLY ONCE
+  ====================================================== -->
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+  ></script>
+
+
+  <!-- =====================================================
+       STOCK LEDGER APP
+       LOAD ONLY ONCE
+  ====================================================== -->
+
+  <script src="./app.js"></script>
+
+
+</body>
+
 </html>

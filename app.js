@@ -1,533 +1,1949 @@
-﻿const STORAGE_KEY = 'stockLedgerEntries_v3';
-const form = document.getElementById('dashboardForm');
-const typeSelect = document.getElementById('movementType');
-const counterpartyLabel = document.getElementById('counterpartyLabel');
-const adjustmentWrap = document.getElementById('adjustmentWrap');
-const stockTableBody = document.getElementById('stockTableBody');
-const receivedSummaryBody = document.getElementById('receivedSummaryBody');
-const issuedSummaryBody = document.getElementById('issuedSummaryBody');
-const receivedTableBody = document.getElementById('receivedTableBody');
-const issuedTableBody = document.getElementById('issuedTableBody');
-const inventoryValueEl = document.getElementById('inventoryValue');
-const itemsInStockEl = document.getElementById('itemsInStock');
-const purchaseCostEl = document.getElementById('receivedValue');
-const salesRevenueEl = document.getElementById('issuedValue');
-const seedButton = document.getElementById('seedButton');
+﻿/* =========================================================
+   STOCK LEDGER
+   Safe browser app with Supabase + local fallback
+   ========================================================= */
 
-let entries = loadEntries();
+(function () {
+  "use strict";
 
-function getTodayString() {
-  return new Date().toISOString().split('T')[0];
-}
+  /* =========================================================
+     PREVENT APP FROM LOADING TWICE
+  ========================================================= */
 
-function loadEntries() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-
-  if (!saved) {
-    const seedEntries = [
-  {
-    id: crypto.randomUUID(),
-    product: '60X40X40',
-    type: 'adjustment',
-    quantity: 100,
-    unitPrice: 0,
-    date: '2026-08-08',
-    counterparty: '',
-    note: 'Opening stock',
-    adjustmentDirection: 'increase'
-  },
-  {
-    id: crypto.randomUUID(),
-    product: 'Opening Stock',
-    type: 'adjustment',
-    quantity: 250,
-    unitPrice: 0,
-    date: '2026-08-08',
-    counterparty: '',
-    note: 'Opening stock',
-    adjustmentDirection: 'increase'
-  }
-];
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(seedEntries));
-    return seedEntries;
+  if (window.__stockLedgerAppLoaded) {
+    console.warn("Stock Ledger app already loaded.");
+    return;
   }
 
-  try {
-    const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (error) {
-    console.error('Failed to parse saved entries:', error);
-    return [];
+  window.__stockLedgerAppLoaded = true;
+
+
+  /* =========================================================
+     CONFIGURATION
+  ========================================================= */
+
+  const STORAGE_KEY = "stock-ledger-entries-v1";
+
+  const SUPABASE_URL =
+    "https://rfpvwhqzixqqtvaqktpr.supabase.co";
+
+  const SUPABASE_KEY =
+    "sb_publishable_xD8zJ6wUrr_37pwaPak6cg_7hY5CbfC";
+
+
+  /* =========================================================
+     SUPABASE CLIENT
+  ========================================================= */
+
+  function getSupabaseClient() {
+
+    if (
+      !window.supabase ||
+      typeof window.supabase.createClient !== "function"
+    ) {
+      return null;
+    }
+
+    if (!window.__stockLedgerSupabaseClient) {
+
+      window.__stockLedgerSupabaseClient =
+        window.supabase.createClient(
+          SUPABASE_URL,
+          SUPABASE_KEY
+        );
+
+    }
+
+    return window.__stockLedgerSupabaseClient;
   }
-}
 
-function saveEntries() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-}
 
-function formatCurrency(value) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'PKR',
-    maximumFractionDigits: 2
-  }).format(Number(value || 0));
-}
+  /* =========================================================
+     DATA
+  ========================================================= */
 
-function getSignedQuantity(entry) {
-  if (entry.type === 'received') {
-    return Number(entry.quantity);
+  let entries = [];
+
+
+  /* =========================================================
+     HELPERS
+  ========================================================= */
+
+  function $(id) {
+    return document.getElementById(id);
   }
 
-  if (entry.type === 'issued') {
-    return -Number(entry.quantity);
+
+  function today() {
+
+    return new Date()
+      .toISOString()
+      .split("T")[0];
+
   }
 
-  if (entry.adjustmentDirection === 'increase') {
-    return Number(entry.quantity);
+
+  function money(value) {
+
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "PKR",
+      maximumFractionDigits: 2
+    }).format(Number(value || 0));
+
   }
 
-  return -Number(entry.quantity);
-}
 
-function getInventoryMap() {
-  const inventory = {};
+  function escapeHtml(value) {
 
-  entries.forEach((entry) => {
-    const product = String(entry.product || '').trim();
-    if (!product) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+
+  }
+
+
+  function generateId() {
+
+    if (
+      window.crypto &&
+      typeof window.crypto.randomUUID === "function"
+    ) {
+      return window.crypto.randomUUID();
+    }
+
+    return (
+      `entry-${Date.now()}-` +
+      Math.random().toString(16).slice(2)
+    );
+
+  }
+
+
+  /* =========================================================
+     LOCAL STORAGE
+  ========================================================= */
+
+  function readLocalEntries() {
+
+    try {
+
+      const raw =
+        localStorage.getItem(STORAGE_KEY);
+
+      const parsed =
+        raw ? JSON.parse(raw) : [];
+
+      return Array.isArray(parsed)
+        ? parsed
+        : [];
+
+    } catch (error) {
+
+      console.warn(
+        "Local storage read failed:",
+        error
+      );
+
+      return [];
+
+    }
+
+  }
+
+
+  function saveLocalEntries(list) {
+
+    try {
+
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(list)
+      );
+
+    } catch (error) {
+
+      console.warn(
+        "Local storage write failed:",
+        error
+      );
+
+    }
+
+  }
+
+
+  /* =========================================================
+     NORMALIZE ENTRY
+  ========================================================= */
+
+  function normalizeEntry(row = {}) {
+
+    return {
+
+      id:
+        row.id ??
+        generateId(),
+
+      product:
+        String(
+          row.product || ""
+        ).trim(),
+
+      type:
+        row.type ||
+        "adjustment",
+
+      quantity:
+        Number(
+          row.quantity || 0
+        ),
+
+      unitPrice:
+        Number(
+          row.unit_price ??
+          row.unitPrice ??
+          0
+        ),
+
+      date:
+        row.date ||
+        today(),
+
+      counterparty:
+        String(
+          row.counterparty || ""
+        ).trim(),
+
+      note:
+        String(
+          row.note || ""
+        ).trim(),
+
+      adjustmentDirection:
+        row.adjustment_direction ??
+        row.adjustmentDirection ??
+        "increase",
+
+      createdAt:
+        row.created_at ??
+        row.createdAt ??
+        new Date().toISOString()
+
+    };
+
+  }
+
+
+  /* =========================================================
+     LOAD DATA
+  ========================================================= */
+
+  async function loadEntries() {
+
+    const client =
+      getSupabaseClient();
+
+
+    /* -------------------------------------------------------
+       SUPABASE
+    ------------------------------------------------------- */
+
+    if (client) {
+
+      try {
+
+        const {
+          data,
+          error
+        } = await client
+          .from("ledger_entries")
+          .select("*")
+          .order(
+            "date",
+            {
+              ascending: false
+            }
+          )
+          .order(
+            "created_at",
+            {
+              ascending: false
+            }
+          );
+
+
+        if (
+          !error &&
+          Array.isArray(data)
+        ) {
+
+          entries =
+            data.map(
+              normalizeEntry
+            );
+
+          saveLocalEntries(
+            entries
+          );
+
+          render();
+
+          return;
+
+        }
+
+
+        console.warn(
+          "Supabase load failed, using local storage:",
+          error
+        );
+
+      } catch (error) {
+
+        console.error(
+          "Supabase connection failed:",
+          error
+        );
+
+      }
+
+    }
+
+
+    /* -------------------------------------------------------
+       LOCAL FALLBACK
+    ------------------------------------------------------- */
+
+    entries =
+      readLocalEntries()
+        .map(normalizeEntry);
+
+    render();
+
+  }
+
+
+  /* =========================================================
+     INVENTORY
+  ========================================================= */
+
+  function getInventory() {
+
+    const inventory = {};
+
+
+    entries.forEach(
+      (entry) => {
+
+        const product =
+          String(
+            entry.product || ""
+          ).trim();
+
+
+        if (!product) {
+          return;
+        }
+
+
+        if (!inventory[product]) {
+
+          inventory[product] = {
+
+            quantity: 0,
+
+            totalCost: 0,
+
+            costQuantity: 0,
+
+            averageCost: 0,
+
+            stockValue: 0
+
+          };
+
+        }
+
+
+        const item =
+          inventory[product];
+
+
+        /* RECEIVED */
+
+        if (
+          entry.type === "received"
+        ) {
+
+          item.quantity +=
+            entry.quantity;
+
+          item.totalCost +=
+            entry.quantity *
+            entry.unitPrice;
+
+          item.costQuantity +=
+            entry.quantity;
+
+        }
+
+
+        /* ISSUED */
+
+        else if (
+          entry.type === "issued"
+        ) {
+
+          item.quantity -=
+            entry.quantity;
+
+        }
+
+
+        /* ADJUSTMENT */
+
+        else if (
+          entry.type === "adjustment"
+        ) {
+
+          if (
+            entry.adjustmentDirection ===
+            "increase"
+          ) {
+
+            item.quantity +=
+              entry.quantity;
+
+
+            if (
+              entry.unitPrice > 0
+            ) {
+
+              item.totalCost +=
+                entry.quantity *
+                entry.unitPrice;
+
+              item.costQuantity +=
+                entry.quantity;
+
+            }
+
+          } else {
+
+            item.quantity -=
+              entry.quantity;
+
+          }
+
+        }
+
+      }
+    );
+
+
+    Object.values(
+      inventory
+    ).forEach(
+      (item) => {
+
+        if (
+          item.costQuantity > 0
+        ) {
+
+          item.averageCost =
+            item.totalCost /
+            item.costQuantity;
+
+        }
+
+
+        item.stockValue =
+          Math.max(
+            0,
+            item.quantity
+          ) *
+          item.averageCost;
+
+      }
+    );
+
+
+    return inventory;
+
+  }
+
+
+  /* =========================================================
+     DASHBOARD STATS
+  ========================================================= */
+
+  function renderStats() {
+
+    const inventory =
+      getInventory();
+
+
+    let inventoryValue = 0;
+
+    let itemsInStock = 0;
+
+
+    Object.values(
+      inventory
+    ).forEach(
+      (item) => {
+
+        inventoryValue +=
+          item.stockValue;
+
+        itemsInStock +=
+          Math.max(
+            0,
+            item.quantity
+          );
+
+      }
+    );
+
+
+    const receivedValue =
+      entries
+        .filter(
+          (entry) =>
+            entry.type === "received"
+        )
+        .reduce(
+          (total, entry) =>
+            total +
+            entry.quantity *
+            entry.unitPrice,
+          0
+        );
+
+
+    const issuedValue =
+      entries
+        .filter(
+          (entry) =>
+            entry.type === "issued"
+        )
+        .reduce(
+          (total, entry) =>
+            total +
+            entry.quantity *
+            entry.unitPrice,
+          0
+        );
+
+
+    if ($("inventoryValue")) {
+
+      $("inventoryValue")
+        .textContent =
+        money(
+          inventoryValue
+        );
+
+    }
+
+
+    if ($("itemsInStock")) {
+
+      $("itemsInStock")
+        .textContent =
+        itemsInStock;
+
+    }
+
+
+    if ($("purchaseCost")) {
+
+      $("purchaseCost")
+        .textContent =
+        money(
+          receivedValue
+        );
+
+    }
+
+
+    if ($("salesRevenue")) {
+
+      $("salesRevenue")
+        .textContent =
+        money(
+          issuedValue
+        );
+
+    }
+
+  }
+
+
+  /* =========================================================
+     STOCK TABLE
+  ========================================================= */
+
+  function renderStockTable() {
+
+    const body =
+      $("stockTableBody");
+
+
+    if (!body) {
       return;
     }
 
-    if (!inventory[product]) {
-      inventory[product] = {
-        quantity: 0,
-        purchaseCost: 0,
-        purchaseQty: 0,
-        averageCost: 0,
-        value: 0
-      };
-    }
 
-    const delta = getSignedQuantity(entry);
-    inventory[product].quantity += delta;
+    const inventory =
+      getInventory();
 
-    if (entry.type === 'received') {
-      inventory[product].purchaseCost += Number(entry.quantity) * Number(entry.unitPrice || 0);
-      inventory[product].purchaseQty += Number(entry.quantity);
-    }
 
-    if (entry.type === 'adjustment' && entry.adjustmentDirection === 'increase') {
-      inventory[product].purchaseCost += Number(entry.quantity) * Number(entry.unitPrice || 0);
-      inventory[product].purchaseQty += Number(entry.quantity);
-    }
-  });
+    const products =
+      Object.entries(
+        inventory
+      ).filter(
+        ([, item]) =>
+          item.quantity > 0
+      );
 
-  Object.keys(inventory).forEach((product) => {
-    const item = inventory[product];
-    item.averageCost = item.purchaseQty > 0 ? item.purchaseCost / item.purchaseQty : 0;
-    item.value = item.quantity > 0 ? item.quantity * item.averageCost : 0;
-  });
 
-  return inventory;
-}
+    if (!products.length) {
 
-function getSummaryStats() {
-  const inventory = getInventoryMap();
-  const inventoryValue = Object.values(inventory).reduce((sum, item) => sum + item.value, 0);
-  const itemsInStock = Object.values(inventory).reduce((sum, item) => sum + Math.max(0, item.quantity), 0);
-  const receivedValue = entries
-    .filter((entry) => entry.type === 'received')
-    .reduce((sum, entry) => sum + Number(entry.quantity) * Number(entry.unitPrice || 0), 0);
-
-  const issuedValue = entries
-    .filter((entry) => entry.type === 'issued')
-    .reduce((sum, entry) => sum + Number(entry.quantity) * Number(entry.unitPrice || 0), 0);
-
-  return { inventoryValue, itemsInStock, receivedValue, issuedValue, inventory };
-}
-
-function renderStats() {
-  const summary = getSummaryStats();
-
-  if (inventoryValueEl) inventoryValueEl.textContent = formatCurrency(summary.inventoryValue);
-  if (itemsInStockEl) itemsInStockEl.textContent = String(summary.itemsInStock);
-  if (purchaseCostEl) purchaseCostEl.textContent = formatCurrency(summary.receivedValue);
-  if (salesRevenueEl) salesRevenueEl.textContent = formatCurrency(summary.issuedValue);
-}
-
-function renderStockTable() {
-  if (!stockTableBody) return;
-
-  const { inventory } = getSummaryStats();
-  const rows = Object.entries(inventory)
-    .filter(([, item]) => item.quantity > 0)
-    .sort((a, b) => b[1].quantity - a[1].quantity);
-
-  if (!rows.length) {
-    stockTableBody.innerHTML = '<tr><td colspan="4" class="empty-row">No stock available</td></tr>';
-    return;
-  }
-
-  stockTableBody.innerHTML = rows
-    .map(([product, item]) => {
-      return `
+      body.innerHTML = `
         <tr>
-          <td>${escapeHtml(product)}</td>
-          <td>${item.quantity}</td>
-          <td>${formatCurrency(item.averageCost)}</td>
-          <td>${formatCurrency(item.value)}</td>
+          <td
+            colspan="4"
+            class="empty-row"
+          >
+            No stock available
+          </td>
         </tr>
       `;
-    })
-    .join('');
-}
 
-function renderReceivedSummary() {
-  if (!receivedSummaryBody) return;
+      return;
 
-  const summary = {};
-  entries
-    .filter((entry) => entry.type === 'received')
-    .forEach((entry) => {
-      const key = entry.product;
-      summary[key] = (summary[key] || 0) + Number(entry.quantity || 0);
-    });
+    }
 
-  const rows = Object.entries(summary);
-  if (!rows.length) {
-    receivedSummaryBody.innerHTML = '<tr><td colspan="2" class="empty-row">No received stock</td></tr>';
-    return;
+
+    body.innerHTML =
+      products
+        .map(
+          ([product, item]) => `
+
+            <tr>
+
+              <td>
+                ${escapeHtml(product)}
+              </td>
+
+              <td>
+                ${item.quantity}
+              </td>
+
+              <td>
+                ${money(
+                  item.averageCost
+                )}
+              </td>
+
+              <td>
+                ${money(
+                  item.stockValue
+                )}
+              </td>
+
+            </tr>
+
+          `
+        )
+        .join("");
+
   }
 
-  receivedSummaryBody.innerHTML = rows
-    .map(([product, qty]) => `
-      <tr>
-        <td>${escapeHtml(product)}</td>
-        <td>${qty}</td>
-      </tr>
-    `)
-    .join('');
-}
 
-function renderIssuedSummary() {
-  if (!issuedSummaryBody) return;
+  /* =========================================================
+     RECEIVED TABLE
+  ========================================================= */
 
-  const summary = {};
-  entries
-    .filter((entry) => entry.type === 'issued')
-    .forEach((entry) => {
-      const key = entry.product;
-      summary[key] = (summary[key] || 0) + Number(entry.quantity || 0);
-    });
+  function renderReceivedTable() {
 
-  const rows = Object.entries(summary);
-  if (!rows.length) {
-    issuedSummaryBody.innerHTML = '<tr><td colspan="2" class="empty-row">No issued stock</td></tr>';
-    return;
+    const body =
+      $("receivedTableBody");
+
+
+    if (!body) {
+      return;
+    }
+
+
+    const received =
+      entries.filter(
+        (entry) =>
+          entry.type === "received"
+      );
+
+
+    if (!received.length) {
+
+      body.innerHTML = `
+        <tr>
+          <td
+            colspan="7"
+            class="empty-row"
+          >
+            No received stock records
+          </td>
+        </tr>
+      `;
+
+      return;
+
+    }
+
+
+    body.innerHTML =
+      received
+        .map(
+          (entry) => `
+
+            <tr>
+
+              <td>
+                ${escapeHtml(
+                  entry.date
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  entry.product
+                )}
+              </td>
+
+              <td>
+                ${entry.quantity}
+              </td>
+
+              <td>
+                ${money(
+                  entry.unitPrice
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  entry.counterparty
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  entry.note
+                )}
+              </td>
+
+              <td>
+
+                <button
+                  class="secondary edit-btn"
+                  data-id="${entry.id}"
+                  type="button"
+                >
+                  Edit
+                </button>
+
+                <button
+                  class="delete-btn delete-entry-btn"
+                  data-id="${entry.id}"
+                  type="button"
+                >
+                  Delete
+                </button>
+
+              </td>
+
+            </tr>
+
+          `
+        )
+        .join("");
+
   }
 
-  issuedSummaryBody.innerHTML = rows
-    .map(([product, qty]) => `
-      <tr>
-        <td>${escapeHtml(product)}</td>
-        <td>${qty}</td>
-      </tr>
-    `)
-    .join('');
-}
 
-function renderReceivedTable() {
-  if (!receivedTableBody) return;
+  /* =========================================================
+     ISSUED TABLE
+  ========================================================= */
 
-  const receivedEntries = entries
-    .filter((entry) => entry.type === 'received')
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  function renderIssuedTable() {
 
-  if (!receivedEntries.length) {
-    receivedTableBody.innerHTML = '<tr><td colspan="7" class="empty-row">No stock received yet</td></tr>';
-    return;
+    const body =
+      $("issuedTableBody");
+
+
+    if (!body) {
+      return;
+    }
+
+
+    const issued =
+      entries.filter(
+        (entry) =>
+          entry.type === "issued"
+      );
+
+
+    if (!issued.length) {
+
+      body.innerHTML = `
+        <tr>
+          <td
+            colspan="7"
+            class="empty-row"
+          >
+            No issued stock records
+          </td>
+        </tr>
+      `;
+
+      return;
+
+    }
+
+
+    body.innerHTML =
+      issued
+        .map(
+          (entry) => `
+
+            <tr>
+
+              <td>
+                ${escapeHtml(
+                  entry.date
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  entry.product
+                )}
+              </td>
+
+              <td>
+                ${entry.quantity}
+              </td>
+
+              <td>
+                ${money(
+                  entry.unitPrice
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  entry.counterparty
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  entry.note
+                )}
+              </td>
+
+              <td>
+
+                <button
+                  class="secondary edit-btn"
+                  data-id="${entry.id}"
+                  type="button"
+                >
+                  Edit
+                </button>
+
+                <button
+                  class="delete-btn delete-entry-btn"
+                  data-id="${entry.id}"
+                  type="button"
+                >
+                  Delete
+                </button>
+
+              </td>
+
+            </tr>
+
+          `
+        )
+        .join("");
+
   }
 
-  receivedTableBody.innerHTML = receivedEntries
-    .map((entry) => `
-      <tr>
-        <td>${entry.date}</td>
-        <td>${escapeHtml(entry.product)}</td>
-        <td>+${entry.quantity}</td>
-        <td>${formatCurrency(entry.unitPrice)}</td>
-        <td>${escapeHtml(entry.counterparty || 'â€”')}</td>
-        <td>${escapeHtml(entry.note || 'â€”')}</td>
-        <td>
-          <div class="action-group">
-            <button class="secondary small-btn edit-btn" data-id="${entry.id}" type="button">Edit</button>
-            <button class="delete-btn" data-id="${entry.id}" type="button">Delete</button>
-          </div>
-        </td>
-      </tr>
-    `)
-    .join('');
 
-  receivedTableBody.querySelectorAll('.delete-btn').forEach((button) => {
-    button.addEventListener('click', () => {
-      deleteEntry(button.getAttribute('data-id'));
-    });
-  });
+  /* =========================================================
+     HISTORY TABLE
+  ========================================================= */
 
-  receivedTableBody.querySelectorAll('.edit-btn').forEach((button) => {
-    button.addEventListener('click', () => {
-      const target = entries.find((entry) => entry.id === button.getAttribute('data-id'));
-      if (target) openEditForm(target, 'received');
-    });
-  });
-}
+  function renderHistoryTable() {
 
-function renderIssuedTable() {
-  if (!issuedTableBody) return;
+    const body =
+      $("historyTableBody");
 
-  const issuedEntries = entries
-    .filter((entry) => entry.type === 'issued')
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  if (!issuedEntries.length) {
-    issuedTableBody.innerHTML = '<tr><td colspan="7" class="empty-row">No stock issued yet</td></tr>';
-    return;
+    if (!body) {
+      return;
+    }
+
+
+    if (!entries.length) {
+
+      body.innerHTML = `
+        <tr>
+          <td
+            colspan="7"
+            class="empty-row"
+          >
+            No history available
+          </td>
+        </tr>
+      `;
+
+      return;
+
+    }
+
+
+    body.innerHTML =
+      entries
+        .map(
+          (entry) => `
+
+            <tr>
+
+              <td>
+                ${escapeHtml(
+                  entry.date
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  entry.product
+                )}
+              </td>
+
+              <td>
+
+                <span
+                  class="badge ${escapeHtml(
+                    entry.type
+                  )}"
+                >
+                  ${escapeHtml(
+                    entry.type
+                  )}
+                </span>
+
+              </td>
+
+              <td>
+                ${entry.quantity}
+              </td>
+
+              <td>
+                ${money(
+                  entry.unitPrice
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  entry.counterparty
+                )}
+              </td>
+
+              <td>
+                ${escapeHtml(
+                  entry.note
+                )}
+              </td>
+
+            </tr>
+
+          `
+        )
+        .join("");
+
   }
 
-  issuedTableBody.innerHTML = issuedEntries
-    .map((entry) => `
-      <tr>
-        <td>${entry.date}</td>
-        <td>${escapeHtml(entry.product)}</td>
-        <td>-${entry.quantity}</td>
-        <td>${formatCurrency(entry.unitPrice)}</td>
-        <td>${escapeHtml(entry.counterparty || 'â€”')}</td>
-        <td>${escapeHtml(entry.note || 'â€”')}</td>
-        <td>
-          <div class="action-group">
-            <button class="secondary small-btn edit-btn" data-id="${entry.id}" type="button">Edit</button>
-            <button class="delete-btn" data-id="${entry.id}" type="button">Delete</button>
-          </div>
-        </td>
-      </tr>
-    `)
-    .join('');
 
-  issuedTableBody.querySelectorAll('.delete-btn').forEach((button) => {
-    button.addEventListener('click', () => {
-      deleteEntry(button.getAttribute('data-id'));
-    });
-  });
+  /* =========================================================
+     RENDER EVERYTHING
+  ========================================================= */
 
-  issuedTableBody.querySelectorAll('.edit-btn').forEach((button) => {
-    button.addEventListener('click', () => {
-      const target = entries.find((entry) => entry.id === button.getAttribute('data-id'));
-      if (target) openEditForm(target, 'issued');
-    });
-  });
-}
+  function render() {
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
+    renderStats();
 
-function toggleFields() {
-  const showAdjustment = typeSelect.value === 'adjustment';
-  adjustmentWrap.classList.toggle('hidden', !showAdjustment);
+    renderStockTable();
 
-  const currentValue = document.getElementById('counterparty')?.value || '';
+    renderReceivedTable();
 
-  if (typeSelect.value === 'issued') {
-    counterpartyLabel.innerHTML = 'Person name <input id="counterparty" name="counterparty" type="text" placeholder="e.g. Rajesh" />';
-  } else if (typeSelect.value === 'received') {
-    counterpartyLabel.innerHTML = 'Vendor name <input id="counterparty" name="counterparty" type="text" placeholder="e.g. ABC Supplies" />';
-  } else {
-    counterpartyLabel.innerHTML = 'Reference <input id="counterparty" name="counterparty" type="text" placeholder="e.g. Manual check" />';
+    renderIssuedTable();
+
+    renderHistoryTable();
+
   }
 
-  const field = document.getElementById('counterparty');
-  if (field) {
-    field.value = currentValue;
-  }
-}
 
-function deleteEntry(id) {
-  entries = entries.filter((entry) => entry.id !== id);
-  saveEntries();
-  render();
-}
+  /* =========================================================
+     FORM FIELD CONTROL
+  ========================================================= */
 
-function handleSubmit(event) {
-  event.preventDefault();
+  function updateFormFields() {
 
-  const product = document.getElementById('product').value.trim();
-  const type = typeSelect.value;
-  const quantity = Number(document.getElementById('quantity').value);
-  const unitPrice = Number(document.getElementById('unitPrice').value || 0);
-  const date = document.getElementById('date').value || getTodayString();
-  const note = document.getElementById('note').value.trim();
-  const counterparty = document.getElementById('counterparty').value.trim();
-  const adjustmentDirection = document.getElementById('adjustmentDirection').value;
+    const type =
+      $("type");
 
-  if (!product || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
-    return;
-  }
+    const counterpartyLabel =
+      $("counterpartyLabel");
 
-  entries.push({
-    id: crypto.randomUUID(),
-    product,
-    type,
-    quantity,
-    unitPrice,
-    date,
-    counterparty,
-    note,
-    adjustmentDirection: type === 'adjustment' ? adjustmentDirection : 'increase'
-  });
+    const adjustmentWrap =
+      $("adjustmentWrap");
 
-  saveEntries();
-  form.reset();
-  document.getElementById('quantity').value = '1';
-  document.getElementById('unitPrice').value = '0';
-  document.getElementById('date').value = getTodayString();
-  toggleFields();
-  render();
-}
 
-function renderHistoryTable() {
-  const tableBody = document.getElementById('historyTableBody');
-  if (!tableBody) return;
+    if (!type) {
+      return;
+    }
 
-  const sortedEntries = [...entries].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  if (!sortedEntries.length) {
-    tableBody.innerHTML = '<tr><td colspan="7" class="empty-row">No history yet</td></tr>';
-    return;
-  }
+    if (adjustmentWrap) {
 
-  tableBody.innerHTML = sortedEntries
-    .map((entry) => `
-      <tr>
-        <td>${entry.date}</td>
-        <td>${escapeHtml(entry.product)}</td>
-        <td>${escapeHtml(entry.type)}</td>
-        <td>${entry.type === 'issued' ? '-' : '+'}${entry.quantity}</td>
-        <td>${formatCurrency(entry.unitPrice)}</td>
-        <td>${escapeHtml(entry.counterparty || 'â€”')}</td>
-        <td>${escapeHtml(entry.note || 'â€”')}</td>
-      </tr>
-    `)
-    .join('');
-}
+      adjustmentWrap.classList.toggle(
+        "hidden",
+        type.value !== "adjustment"
+      );
 
-function openEditForm(entry, mode) {
-  const panel = document.getElementById('editFormPanel');
-  const formEl = document.getElementById('editForm');
-  const entryId = document.getElementById('editEntryId');
-  const editMode = document.getElementById('editMode');
-  const adjustmentDirectionField = document.getElementById('editAdjustmentDirection');
+    }
 
-  if (!panel || !formEl || !entryId || !editMode) return;
 
-  entryId.value = entry.id;
-  editMode.value = mode;
-  document.getElementById('editProduct').value = entry.product || '';
-  document.getElementById('editType').value = entry.type || mode;
-  document.getElementById('editQuantity').value = entry.quantity || 1;
-  document.getElementById('editUnitPrice').value = entry.unitPrice || 0;
-  document.getElementById('editDate').value = entry.date || getTodayString();
-  document.getElementById('editCounterparty').value = entry.counterparty || '';
-  document.getElementById('editNote').value = entry.note || '';
-  if (adjustmentDirectionField) {
-    adjustmentDirectionField.value = entry.adjustmentDirection || 'increase';
+    if (!counterpartyLabel) {
+      return;
+    }
+
+
+    let labelText =
+      "Reference";
+
+    let placeholder =
+      "e.g. Manual adjustment";
+
+
+    if (
+      type.value === "received"
+    ) {
+
+      labelText =
+        "Vendor name";
+
+      placeholder =
+        "e.g. ABC Supplies";
+
+    }
+
+
+    else if (
+      type.value === "issued"
+    ) {
+
+      labelText =
+        "Person name";
+
+      placeholder =
+        "e.g. Ahmed";
+
+    }
+
+
+    counterpartyLabel.innerHTML = `
+
+      ${labelText}
+
+      <input
+        id="counterparty"
+        name="counterparty"
+        type="text"
+        placeholder="${placeholder}"
+      />
+
+    `;
+
   }
 
-  panel.classList.remove('hidden');
-  formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
 
-function handleEditSubmit(event) {
-  event.preventDefault();
+  /* =========================================================
+     SAVE TRANSACTION
+  ========================================================= */
 
-  const entryId = document.getElementById('editEntryId').value;
-  const product = document.getElementById('editProduct').value.trim();
-  const type = document.getElementById('editType').value;
-  const quantity = Number(document.getElementById('editQuantity').value);
-  const unitPrice = Number(document.getElementById('editUnitPrice').value || 0);
-  const date = document.getElementById('editDate').value || getTodayString();
-  const counterparty = document.getElementById('editCounterparty').value.trim();
-  const note = document.getElementById('editNote').value.trim();
-  const adjustmentDirectionField = document.getElementById('editAdjustmentDirection');
-  const adjustmentDirection = adjustmentDirectionField ? adjustmentDirectionField.value : 'increase';
+  async function saveTransaction(event) {
 
-  if (!product || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitPrice) || unitPrice < 0) {
-    return;
-  }
+    event.preventDefault();
 
-  const current = entries.find((entry) => entry.id === entryId);
-  if (!current) return;
 
-  current.product = product;
-  current.type = type;
-  current.quantity = quantity;
-  current.unitPrice = unitPrice;
-  current.date = date;
-  current.counterparty = counterparty;
-  current.note = note;
-  current.adjustmentDirection = type === 'adjustment' ? adjustmentDirection : 'increase';
+    const product =
+      $("product")?.value.trim();
 
-  saveEntries();
-  render();
-  const panel = document.getElementById('editFormPanel');
-  if (panel) panel.classList.add('hidden');
-}
+    const type =
+      $("type")?.value ||
+      "received";
 
-function bindEditForm() {
-  const editForm = document.getElementById('editForm');
-  if (!editForm) return;
+    const quantity =
+      Number(
+        $("quantity")?.value || 0
+      );
 
-  editForm.addEventListener('submit', handleEditSubmit);
-  document.getElementById('cancelEditBtn')?.addEventListener('click', () => {
-    const panel = document.getElementById('editFormPanel');
-    if (panel) panel.classList.add('hidden');
-  });
-}
+    const unitPrice =
+      Number(
+        $("unitPrice")?.value || 0
+      );
 
-function render() {
-  renderStats();
-  renderStockTable();
-  renderReceivedSummary();
-  renderIssuedSummary();
+    const date =
+      $("date")?.value ||
+      today();
 
-  if (document.body.dataset.page === 'received') renderReceivedTable();
-  if (document.body.dataset.page === 'issued') renderIssuedTable();
-  if (document.body.dataset.page === 'history') renderHistoryTable();
-}
+    const counterparty =
+      $("counterparty")?.value.trim() ||
+      "";
 
-if (seedButton) {
-  seedButton.addEventListener('click', () => {
-    entries = loadEntries();
-    saveEntries();
+    const note =
+      $("note")?.value.trim() ||
+      "";
+
+    const adjustmentDirection =
+      $("adjustmentDirection")?.value ||
+      "increase";
+
+
+    if (!product) {
+
+      alert(
+        "Product name enter karein."
+      );
+
+      return;
+
+    }
+
+
+    if (
+      !quantity ||
+      quantity <= 0
+    ) {
+
+      alert(
+        "Valid quantity enter karein."
+      );
+
+      return;
+
+    }
+
+
+    const row = {
+
+      id:
+        generateId(),
+
+      product,
+
+      type,
+
+      quantity,
+
+      unit_price:
+        unitPrice,
+
+      unitPrice,
+
+      date,
+
+      counterparty,
+
+      note,
+
+      adjustment_direction:
+        type === "adjustment"
+          ? adjustmentDirection
+          : "increase"
+
+    };
+
+
+    const client =
+      getSupabaseClient();
+
+
+    /* -------------------------------------------------------
+       SAVE TO SUPABASE
+    ------------------------------------------------------- */
+
+    if (client) {
+
+      try {
+
+        const {
+          error
+        } = await client
+          .from("ledger_entries")
+          .insert([row]);
+
+
+        if (!error) {
+
+          alert(
+            "Transaction successfully save ho gayi."
+          );
+
+
+          $("ledgerForm")?.reset();
+
+
+          if ($("quantity")) {
+            $("quantity").value = "1";
+          }
+
+
+          if ($("unitPrice")) {
+            $("unitPrice").value = "0";
+          }
+
+
+          if ($("date")) {
+            $("date").value =
+              today();
+          }
+
+
+          updateFormFields();
+
+          await loadEntries();
+
+          return;
+
+        }
+
+
+        console.error(
+          "Insert error:",
+          error
+        );
+
+      } catch (error) {
+
+        console.error(
+          "Supabase insert failed:",
+          error
+        );
+
+      }
+
+    }
+
+
+    /* -------------------------------------------------------
+       LOCAL FALLBACK
+    ------------------------------------------------------- */
+
+    const nextEntries = [
+      normalizeEntry(row),
+      ...readLocalEntries()
+        .map(normalizeEntry)
+    ];
+
+
+    saveLocalEntries(
+      nextEntries
+    );
+
+
+    entries =
+      nextEntries;
+
+
     render();
-  });
-}
 
-if (typeSelect) {
-  typeSelect.addEventListener('change', toggleFields);
-}
 
-if (form) {
-  form.addEventListener('submit', handleSubmit);
-}
+    alert(
+      "Transaction saved locally."
+    );
 
-const dateInput = document.getElementById('date');
-if (dateInput) dateInput.value = getTodayString();
-if (typeSelect) toggleFields();
-bindEditForm();
-render();
 
+    $("ledgerForm")?.reset();
+
+
+    if ($("quantity")) {
+      $("quantity").value = "1";
+    }
+
+
+    if ($("unitPrice")) {
+      $("unitPrice").value = "0";
+    }
+
+
+    if ($("date")) {
+      $("date").value =
+        today();
+    }
+
+
+    updateFormFields();
+
+  }
+
+
+  /* =========================================================
+     DELETE ENTRY
+  ========================================================= */
+
+  async function deleteEntry(id) {
+
+    const confirmed =
+      confirm(
+        "Kya aap is record ko delete karna chahte hain?"
+      );
+
+
+    if (!confirmed) {
+      return;
+    }
+
+
+    const client =
+      getSupabaseClient();
+
+
+    if (client) {
+
+      try {
+
+        const {
+          error
+        } = await client
+          .from("ledger_entries")
+          .delete()
+          .eq("id", id);
+
+
+        if (!error) {
+
+          await loadEntries();
+
+          return;
+
+        }
+
+
+        console.error(
+          "Delete error:",
+          error
+        );
+
+      } catch (error) {
+
+        console.error(
+          "Supabase delete failed:",
+          error
+        );
+
+      }
+
+    }
+
+
+    const nextEntries =
+      readLocalEntries()
+        .map(normalizeEntry)
+        .filter(
+          (entry) =>
+            String(entry.id) !==
+            String(id)
+        );
+
+
+    saveLocalEntries(
+      nextEntries
+    );
+
+
+    entries =
+      nextEntries;
+
+
+    render();
+
+  }
+
+
+  /* =========================================================
+     EDIT FORM
+  ========================================================= */
+
+  function openEditForm(id) {
+
+    const entry =
+      entries.find(
+        (item) =>
+          String(item.id) ===
+          String(id)
+      );
+
+
+    if (!entry) {
+
+      alert(
+        "Record nahi mila."
+      );
+
+      return;
+
+    }
+
+
+    const panel =
+      $("editFormPanel");
+
+
+    if (!panel) {
+      return;
+    }
+
+
+    if ($("editEntryId")) {
+      $("editEntryId").value =
+        entry.id;
+    }
+
+
+    if ($("editProduct")) {
+      $("editProduct").value =
+        entry.product;
+    }
+
+
+    if ($("editType")) {
+      $("editType").value =
+        entry.type;
+    }
+
+
+    if ($("editCounterparty")) {
+      $("editCounterparty").value =
+        entry.counterparty;
+    }
+
+
+    if ($("editQuantity")) {
+      $("editQuantity").value =
+        entry.quantity;
+    }
+
+
+    if ($("editUnitPrice")) {
+      $("editUnitPrice").value =
+        entry.unitPrice;
+    }
+
+
+    if ($("editDate")) {
+      $("editDate").value =
+        entry.date;
+    }
+
+
+    if ($("editNote")) {
+      $("editNote").value =
+        entry.note;
+    }
+
+
+    if (
+      $("editAdjustmentDirection")
+    ) {
+
+      $("editAdjustmentDirection")
+        .value =
+        entry.adjustmentDirection;
+
+    }
+
+
+    if ($("editMode")) {
+
+      $("editMode").value =
+        entry.type;
+
+    }
+
+
+    panel.classList.remove(
+      "hidden"
+    );
+
+
+    panel.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+
+  }
+
+
+  /* =========================================================
+     UPDATE ENTRY
+  ========================================================= */
+
+  async function updateEntry(event) {
+
+    event.preventDefault();
+
+
+    const id =
+      $("editEntryId")?.value;
+
+
+    if (!id) {
+
+      alert(
+        "Record ID missing."
+      );
+
+      return;
+
+    }
+
+
+    const product =
+      $("editProduct")?.value.trim();
+
+    const type =
+      $("editType")?.value ||
+      "received";
+
+    const counterparty =
+      $("editCounterparty")?.value.trim() ||
+      "";
+
+    const quantity =
+      Number(
+        $("editQuantity")?.value || 0
+      );
+
+    const unitPrice =
+      Number(
+        $("editUnitPrice")?.value || 0
+      );
+
+    const date =
+      $("editDate")?.value ||
+      today();
+
+    const note =
+      $("editNote")?.value.trim() ||
+      "";
+
+    const adjustmentDirection =
+      $("editAdjustmentDirection")?.value ||
+      "increase";
+
+
+    if (!product) {
+
+      alert(
+        "Product name enter karein."
+      );
+
+      return;
+
+    }
+
+
+    if (
+      !quantity ||
+      quantity <= 0
+    ) {
+
+      alert(
+        "Valid quantity enter karein."
+      );
+
+      return;
+
+    }
+
+
+    const updates = {
+
+      product,
+
+      type,
+
+      counterparty,
+
+      quantity,
+
+      unit_price:
+        unitPrice,
+
+      unitPrice,
+
+      date,
+
+      note,
+
+      adjustment_direction:
+        type === "adjustment"
+          ? adjustmentDirection
+          : "increase"
+
+    };
+
+
+    const client =
+      getSupabaseClient();
+
+
+    if (client) {
+
+      try {
+
+        const {
+          error
+        } = await client
+          .from("ledger_entries")
+          .update(updates)
+          .eq("id", id);
+
+
+        if (!error) {
+
+          alert(
+            "Record successfully update ho gaya."
+          );
+
+
+          closeEditForm();
+
+          await loadEntries();
+
+          return;
+
+        }
+
+
+        console.error(
+          "Update error:",
+          error
+        );
+
+      } catch (error) {
+
+        console.error(
+          "Supabase update failed:",
+          error
+        );
+
+      }
+
+    }
+
+
+    /* -------------------------------------------------------
+       LOCAL UPDATE
+    ------------------------------------------------------- */
+
+    const nextEntries =
+      readLocalEntries()
+        .map(normalizeEntry)
+        .map(
+          (entry) => {
+
+            if (
+              String(entry.id) ===
+              String(id)
+            ) {
+
+              return normalizeEntry({
+
+                ...entry,
+
+                ...updates,
+
+                id,
+
+                adjustmentDirection:
+                  updates.adjustment_direction
+
+              });
+
+            }
+
+
+            return entry;
+
+          }
+        );
+
+
+    saveLocalEntries(
+      nextEntries
+    );
+
+
+    entries =
+      nextEntries;
+
+
+    render();
+
+    closeEditForm();
+
+
+    alert(
+      "Record updated locally."
+    );
+
+  }
+
+
+  /* =========================================================
+     CLOSE EDIT FORM
+  ========================================================= */
+
+  function closeEditForm() {
+
+    const panel =
+      $("editFormPanel");
+
+
+    if (!panel) {
+      return;
+    }
+
+
+    panel.classList.add(
+      "hidden"
+    );
+
+
+    $("editForm")
+      ?.reset();
+
+  }
+
+
+  /* =========================================================
+     TABLE ACTIONS
+  ========================================================= */
+
+  function setupTableActions() {
+
+    if (
+      window.__stockLedgerTableActionsLoaded
+    ) {
+      return;
+    }
+
+
+    window.__stockLedgerTableActionsLoaded =
+      true;
+
+
+    document.addEventListener(
+      "click",
+      (event) => {
+
+        const target =
+          event.target;
+
+
+        if (
+          !(target instanceof Element)
+        ) {
+          return;
+        }
+
+
+        const editButton =
+          target.closest(
+            ".edit-btn"
+          );
+
+
+        if (editButton) {
+
+          const id =
+            editButton.dataset.id;
+
+          openEditForm(id);
+
+          return;
+
+        }
+
+
+        const deleteButton =
+          target.closest(
+            ".delete-entry-btn"
+          );
+
+
+        if (deleteButton) {
+
+          const id =
+            deleteButton.dataset.id;
+
+          deleteEntry(id);
+
+        }
+
+      }
+    );
+
+  }
+
+
+  /* =========================================================
+     INITIALIZE APP
+  ========================================================= */
+
+  async function initializeApp() {
+
+    /* DATE */
+
+    if ($("date")) {
+
+      $("date").value =
+        today();
+
+    }
+
+
+    /* TYPE */
+
+    if ($("type")) {
+
+      $("type")
+        .addEventListener(
+          "change",
+          updateFormFields
+        );
+
+      updateFormFields();
+
+    }
+
+
+    /* ADD FORM */
+
+    if ($("ledgerForm")) {
+
+      $("ledgerForm")
+        .addEventListener(
+          "submit",
+          saveTransaction
+        );
+
+    }
+
+
+    /* EDIT FORM */
+
+    if ($("editForm")) {
+
+      $("editForm")
+        .addEventListener(
+          "submit",
+          updateEntry
+        );
+
+    }
+
+
+    /* CANCEL EDIT */
+
+    if ($("cancelEditBtn")) {
+
+      $("cancelEditBtn")
+        .addEventListener(
+          "click",
+          closeEditForm
+        );
+
+    }
+
+
+    /* TABLE ACTIONS */
+
+    setupTableActions();
+
+
+    /* LOAD DATA */
+
+    await loadEntries();
+
+
+    /* -------------------------------------------------------
+       AUTO REFRESH
+       Every 10 seconds
+    ------------------------------------------------------- */
+
+    if (
+      !window.__stockLedgerRefreshStarted
+    ) {
+
+      window.__stockLedgerRefreshStarted =
+        true;
+
+
+      window.__stockLedgerRefreshTimer =
+        setInterval(
+          loadEntries,
+          10000
+        );
+
+    }
+
+  }
+
+
+  /* =========================================================
+     DOM READY
+  ========================================================= */
+
+  if (
+    document.readyState === "loading"
+  ) {
+
+    document.addEventListener(
+      "DOMContentLoaded",
+      initializeApp,
+      {
+        once: true
+      }
+    );
+
+  } else {
+
+    initializeApp();
+
+  }
+
+
+})(); // IMPORTANT: CLOSE IIFE

@@ -1,52 +1,216 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>History | Stock Ledger</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body data-page="history">
-    <div class="app-shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Audit log</p>
-          <h1>Stock History</h1>
+
+<head>
+
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <title>History | Stock Ledger</title>
+
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  />
+
+</head>
+
+
+<body data-page="history">
+
+  <div class="app-shell">
+
+
+    <!-- =========================
+         HEADER
+    ========================== -->
+
+    <header class="topbar">
+
+      <div>
+
+        <p class="eyebrow">
+          Audit log
+        </p>
+
+        <h1>
+          Stock History
+        </h1>
+
+      </div>
+
+
+      <!-- =========================
+           NAVIGATION
+      ========================== -->
+
+      <nav
+        class="main-nav"
+        aria-label="Main menu"
+      >
+
+        <a
+          class="nav-link"
+          href="index.html"
+        >
+          Dashboard
+        </a>
+
+
+        <a
+          class="nav-link"
+          href="received.html"
+        >
+          Received
+        </a>
+
+
+        <a
+          class="nav-link"
+          href="issued.html"
+        >
+          Issued
+        </a>
+
+
+        <a
+          class="nav-link active"
+          href="history.html"
+        >
+          History
+        </a>
+
+      </nav>
+
+    </header>
+
+
+    <main>
+
+
+      <!-- =========================
+           COMPLETE HISTORY
+      ========================== -->
+
+      <section class="panel">
+
+
+        <div class="section-header">
+
+          <h2>
+            Complete record history
+          </h2>
+
         </div>
-        <nav class="main-nav" aria-label="Main menu">
-          <a class="nav-link" href="dashboard.html">Dashboard</a>
-          <a class="nav-link" href="received.html">Received</a>
-          <a class="nav-link" href="issued.html">Issued</a>
-          <a class="nav-link active" href="history.html">History</a>
-        </nav>
-      </header>
 
-      <main>
-        <section class="panel">
-          <div class="section-header">
-            <h2>Complete record history</h2>
-          </div>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Product</th>
-                  <th>Type</th>
-                  <th>Qty</th>
-                  <th>Price</th>
-                  <th>Vendor / Person</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody id="historyTableBody"></tbody>
-            </table>
-          </div>
-        </section>
-      </main>
-    </div>
+        <div class="table-wrap">
 
-    <script src="app.js"></script>
-  </body>
+
+          <table>
+
+
+            <thead>
+
+              <tr>
+
+                <th>
+                  Date
+                </th>
+
+                <th>
+                  Product
+                </th>
+
+                <th>
+                  Type
+                </th>
+
+                <th>
+                  Qty
+                </th>
+
+                <th>
+                  Price
+                </th>
+
+                <th>
+                  Vendor / Person
+                </th>
+
+                <th>
+                  Notes
+                </th>
+
+              </tr>
+
+            </thead>
+
+
+            <tbody
+              id="historyTableBody"
+            >
+
+              <!-- Supabase history will appear here -->
+
+            </tbody>
+
+
+          </table>
+
+
+        </div>
+
+
+      </section>
+
+
+    </main>
+
+  </div>
+
+
+  <!-- =========================
+       SUPABASE LIBRARY
+  ========================== -->
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+
+  <!-- =========================
+       SUPABASE CONNECTION
+  ========================== -->
+
+  <script>
+
+    const SUPABASE_URL =
+      "https://rfpvwhqzixqqtvaqktpr.supabase.co";
+
+    const SUPABASE_ANON_KEY =
+      "sb_publishable_xD8zJ6wUrr_37pwaPak6cg_7hY5CbfC";
+
+    const supabaseClient =
+      window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY
+      );
+
+  </script>
+
+
+  <!-- =========================
+       MAIN APP
+  ========================== -->
+
+  <script src="app.js"></script>
+
+
+</body>
+
 </html>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="app.js"></script>
