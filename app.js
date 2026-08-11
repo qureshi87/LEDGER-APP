@@ -1,7 +1,7 @@
 ﻿```javascript
 /* =========================================================
    STOCK LEDGER
-   SUPABASE FIRST + LOCAL FALLBACK
+   Supabase + Local Fallback
    ========================================================= */
 
 (function () {
@@ -20,7 +20,7 @@
 
 
   /* =========================================================
-     CONFIG
+     CONFIGURATION
   ========================================================= */
 
   const STORAGE_KEY = "stock-ledger-entries-v1";
@@ -37,22 +37,20 @@
   ========================================================= */
 
   function getSupabaseClient() {
-
     if (
       !window.supabase ||
       typeof window.supabase.createClient !== "function"
     ) {
+      console.error("Supabase library not loaded.");
       return null;
     }
 
     if (!window.__stockLedgerSupabaseClient) {
-
       window.__stockLedgerSupabaseClient =
         window.supabase.createClient(
           SUPABASE_URL,
           SUPABASE_KEY
         );
-
     }
 
     return window.__stockLedgerSupabaseClient;
@@ -76,39 +74,30 @@
 
 
   function today() {
-
-    return new Date()
-      .toISOString()
-      .split("T")[0];
-
+    return new Date().toISOString().split("T")[0];
   }
 
 
   function money(value) {
-
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "PKR",
       maximumFractionDigits: 2
     }).format(Number(value || 0));
-
   }
 
 
   function escapeHtml(value) {
-
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
-
   }
 
 
   function generateId() {
-
     if (
       window.crypto &&
       typeof window.crypto.randomUUID === "function"
@@ -117,10 +106,11 @@
     }
 
     return (
-      `entry-${Date.now()}-` +
+      "entry-" +
+      Date.now() +
+      "-" +
       Math.random().toString(16).slice(2)
     );
-
   }
 
 
@@ -129,83 +119,57 @@
   ========================================================= */
 
   function readLocalEntries() {
-
     try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
 
-      const raw =
-        localStorage.getItem(STORAGE_KEY);
-
-      const parsed =
-        raw ? JSON.parse(raw) : [];
-
-      return Array.isArray(parsed)
-        ? parsed
-        : [];
-
+      return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
-
-      console.error(
-        "Local storage read failed:",
-        error
-      );
-
+      console.warn("Local storage read failed:", error);
       return [];
-
     }
-
   }
 
 
   function saveLocalEntries(list) {
-
     try {
-
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify(list)
       );
-
     } catch (error) {
-
-      console.error(
-        "Local storage write failed:",
-        error
-      );
-
+      console.warn("Local storage write failed:", error);
     }
-
   }
 
 
   /* =========================================================
-     NORMALIZE DATABASE ROW
+     NORMALIZE ENTRY
   ========================================================= */
 
-  function normalizeEntry(row = {}) {
+  function normalizeEntry(row) {
+    row = row || {};
 
     return {
-
       id:
-        row.id ??
+        row.id ||
         generateId(),
 
       product:
-        String(
-          row.product || ""
-        ).trim(),
+        String(row.product || "").trim(),
 
       type:
         row.type ||
         "adjustment",
 
       quantity:
-        Number(
-          row.quantity || 0
-        ),
+        Number(row.quantity || 0),
 
       unitPrice:
         Number(
-          row.unit_price || 0
+          row.unit_price ??
+          row.unitPrice ??
+          0
         ),
 
       date:
@@ -223,103 +187,76 @@
         ).trim(),
 
       adjustmentDirection:
-        row.adjustment_direction ||
+        row.adjustment_direction ??
+        row.adjustmentDirection ??
         "increase",
 
       createdAt:
-        row.created_at ||
+        row.created_at ??
+        row.createdAt ??
         new Date().toISOString()
-
     };
-
   }
 
 
   /* =========================================================
-     LOAD ENTRIES FROM SUPABASE
+     LOAD FROM SUPABASE
   ========================================================= */
 
   async function loadEntries() {
-
-    const client =
-      getSupabaseClient();
-
-
-    /* -------------------------------------------------------
-       SUPABASE AVAILABLE
-    ------------------------------------------------------- */
+    const client = getSupabaseClient();
 
     if (client) {
-
       try {
-
-        const {
-          data,
-          error
-        } = await client
+        const result = await client
           .from("ledger_entries")
           .select("*")
-          .order(
-            "date",
-            {
-              ascending: false
-            }
-          )
-          .order(
-            "created_at",
-            {
-              ascending: false
-            }
-          );
+          .order("date", {
+            ascending: false
+          })
+          .order("created_at", {
+            ascending: false
+          });
 
+        const data = result.data;
+        const error = result.error;
 
         if (!error && Array.isArray(data)) {
+          entries = data.map(normalizeEntry);
 
-          entries =
-            data.map(
-              normalizeEntry
-            );
-
-          saveLocalEntries(
-            entries
-          );
+          saveLocalEntries(entries);
 
           render();
 
-          return true;
+          console.log(
+            "Supabase data loaded:",
+            entries.length
+          );
 
+          return true;
         }
 
-
         console.error(
-          "Supabase load error:",
+          "Supabase load failed:",
           error
         );
 
       } catch (error) {
-
         console.error(
-          "Supabase connection error:",
+          "Supabase connection failed:",
           error
         );
-
       }
-
     }
 
+    /* LOCAL FALLBACK */
 
-    /* -------------------------------------------------------
-       LOCAL FALLBACK ONLY WHEN SUPABASE IS UNAVAILABLE
-    ------------------------------------------------------- */
-
-    entries =
-      readLocalEntries()
-        .map(normalizeEntry);
+    entries = readLocalEntries()
+      .map(normalizeEntry);
 
     render();
 
     return false;
-
   }
 
 
@@ -328,148 +265,90 @@
   ========================================================= */
 
   function getInventory() {
-
     const inventory = {};
 
+    entries.forEach(function (entry) {
+      const product =
+        String(entry.product || "").trim();
 
-    entries.forEach(
-      (entry) => {
+      if (!product) {
+        return;
+      }
 
-        const product =
-          String(
-            entry.product || ""
-          ).trim();
+      if (!inventory[product]) {
+        inventory[product] = {
+          quantity: 0,
+          totalCost: 0,
+          costQuantity: 0,
+          averageCost: 0,
+          stockValue: 0
+        };
+      }
 
-
-        if (!product) {
-          return;
-        }
-
-
-        if (!inventory[product]) {
-
-          inventory[product] = {
-
-            quantity: 0,
-
-            totalCost: 0,
-
-            costQuantity: 0,
-
-            averageCost: 0,
-
-            stockValue: 0
-
-          };
-
-        }
+      const item = inventory[product];
 
 
-        const item =
-          inventory[product];
+      /* RECEIVED */
+
+      if (entry.type === "received") {
+        item.quantity += entry.quantity;
+
+        item.totalCost +=
+          entry.quantity *
+          entry.unitPrice;
+
+        item.costQuantity +=
+          entry.quantity;
+      }
 
 
-        /* RECEIVED */
+      /* ISSUED */
+
+      else if (entry.type === "issued") {
+        item.quantity -= entry.quantity;
+      }
+
+
+      /* ADJUSTMENT */
+
+      else if (entry.type === "adjustment") {
 
         if (
-          entry.type === "received"
+          entry.adjustmentDirection ===
+          "increase"
         ) {
+          item.quantity += entry.quantity;
 
-          item.quantity +=
-            entry.quantity;
+          if (entry.unitPrice > 0) {
+            item.totalCost +=
+              entry.quantity *
+              entry.unitPrice;
 
-          item.totalCost +=
-            entry.quantity *
-            entry.unitPrice;
-
-          item.costQuantity +=
-            entry.quantity;
-
-        }
-
-
-        /* ISSUED */
-
-        else if (
-          entry.type === "issued"
-        ) {
-
-          item.quantity -=
-            entry.quantity;
-
-        }
-
-
-        /* ADJUSTMENT */
-
-        else if (
-          entry.type === "adjustment"
-        ) {
-
-          if (
-            entry.adjustmentDirection ===
-            "increase"
-          ) {
-
-            item.quantity +=
+            item.costQuantity +=
               entry.quantity;
-
-
-            if (
-              entry.unitPrice > 0
-            ) {
-
-              item.totalCost +=
-                entry.quantity *
-                entry.unitPrice;
-
-              item.costQuantity +=
-                entry.quantity;
-
-            }
-
-          } else {
-
-            item.quantity -=
-              entry.quantity;
-
           }
-
+        } else {
+          item.quantity -= entry.quantity;
         }
-
       }
-    );
+    });
 
 
-    Object.values(
-      inventory
-    ).forEach(
-      (item) => {
+    Object.values(inventory).forEach(function (item) {
 
-        if (
-          item.costQuantity > 0
-        ) {
-
-          item.averageCost =
-            item.totalCost /
-            item.costQuantity;
-
-        }
-
-
-        item.stockValue =
-          Math.max(
-            0,
-            item.quantity
-          ) *
-          item.averageCost;
-
+      if (item.costQuantity > 0) {
+        item.averageCost =
+          item.totalCost /
+          item.costQuantity;
       }
-    );
+
+      item.stockValue =
+        Math.max(0, item.quantity) *
+        item.averageCost;
+    });
 
 
     return inventory;
-
   }
 
 
@@ -478,95 +357,73 @@
   ========================================================= */
 
   function renderStats() {
-
-    const inventory =
-      getInventory();
-
+    const inventory = getInventory();
 
     let inventoryValue = 0;
-
     let itemsInStock = 0;
 
+    Object.values(inventory).forEach(
+      function (item) {
+        inventoryValue += item.stockValue;
 
-    Object.values(
-      inventory
-    ).forEach(
-      (item) => {
-
-        inventoryValue +=
-          item.stockValue;
-
-        itemsInStock +=
-          Math.max(
-            0,
-            item.quantity
-          );
-
+        itemsInStock += Math.max(
+          0,
+          item.quantity
+        );
       }
     );
 
 
     const receivedValue =
       entries
-        .filter(
-          (entry) =>
-            entry.type === "received"
-        )
-        .reduce(
-          (total, entry) =>
+        .filter(function (entry) {
+          return entry.type === "received";
+        })
+        .reduce(function (total, entry) {
+          return (
             total +
             entry.quantity *
-            entry.unitPrice,
-          0
-        );
+            entry.unitPrice
+          );
+        }, 0);
 
 
     const issuedValue =
       entries
-        .filter(
-          (entry) =>
-            entry.type === "issued"
-        )
-        .reduce(
-          (total, entry) =>
+        .filter(function (entry) {
+          return entry.type === "issued";
+        })
+        .reduce(function (total, entry) {
+          return (
             total +
             entry.quantity *
-            entry.unitPrice,
-          0
-        );
+            entry.unitPrice
+          );
+        }, 0);
 
 
     if ($("inventoryValue")) {
-
       $("inventoryValue").textContent =
         money(inventoryValue);
-
     }
 
 
     if ($("itemsInStock")) {
-
       $("itemsInStock").textContent =
         itemsInStock;
-
     }
 
 
     if ($("purchaseCost")) {
-
       $("purchaseCost").textContent =
         money(receivedValue);
-
     }
 
 
     if ($("salesRevenue")) {
-
       $("salesRevenue").textContent =
         money(issuedValue);
-
     }
-
   }
 
 
@@ -575,28 +432,22 @@
   ========================================================= */
 
   function renderStockTable() {
+    const body = $("stockTableBody");
 
-    const body =
-      $("stockTableBody");
+    if (!body) {
+      return;
+    }
 
-    if (!body) return;
-
-
-    const inventory =
-      getInventory();
-
+    const inventory = getInventory();
 
     const products =
-      Object.entries(
-        inventory
-      ).filter(
-        ([, item]) =>
-          item.quantity > 0
-      );
+      Object.entries(inventory)
+        .filter(function (item) {
+          return item[1].quantity > 0;
+        });
 
 
     if (!products.length) {
-
       body.innerHTML = `
         <tr>
           <td colspan="4" class="empty-row">
@@ -606,15 +457,17 @@
       `;
 
       return;
-
     }
 
 
     body.innerHTML =
       products
-        .map(
-          ([product, item]) => `
+        .map(function (item) {
 
+          const product = item[0];
+          const stock = item[1];
+
+          return `
             <tr>
 
               <td>
@@ -622,23 +475,21 @@
               </td>
 
               <td>
-                ${item.quantity}
+                ${stock.quantity}
               </td>
 
               <td>
-                ${money(item.averageCost)}
+                ${money(stock.averageCost)}
               </td>
 
               <td>
-                ${money(item.stockValue)}
+                ${money(stock.stockValue)}
               </td>
 
             </tr>
-
-          `
-        )
+          `;
+        })
         .join("");
-
   }
 
 
@@ -647,22 +498,19 @@
   ========================================================= */
 
   function renderReceivedTable() {
+    const body = $("receivedTableBody");
 
-    const body =
-      $("receivedTableBody");
-
-    if (!body) return;
-
+    if (!body) {
+      return;
+    }
 
     const received =
-      entries.filter(
-        (entry) =>
-          entry.type === "received"
-      );
+      entries.filter(function (entry) {
+        return entry.type === "received";
+      });
 
 
     if (!received.length) {
-
       body.innerHTML = `
         <tr>
           <td colspan="7" class="empty-row">
@@ -672,15 +520,14 @@
       `;
 
       return;
-
     }
 
 
     body.innerHTML =
       received
-        .map(
-          (entry) => `
+        .map(function (entry) {
 
+          return `
             <tr>
 
               <td>
@@ -728,11 +575,9 @@
               </td>
 
             </tr>
-
-          `
-        )
+          `;
+        })
         .join("");
-
   }
 
 
@@ -741,22 +586,19 @@
   ========================================================= */
 
   function renderIssuedTable() {
+    const body = $("issuedTableBody");
 
-    const body =
-      $("issuedTableBody");
-
-    if (!body) return;
-
+    if (!body) {
+      return;
+    }
 
     const issued =
-      entries.filter(
-        (entry) =>
-          entry.type === "issued"
-      );
+      entries.filter(function (entry) {
+        return entry.type === "issued";
+      });
 
 
     if (!issued.length) {
-
       body.innerHTML = `
         <tr>
           <td colspan="7" class="empty-row">
@@ -766,15 +608,14 @@
       `;
 
       return;
-
     }
 
 
     body.innerHTML =
       issued
-        .map(
-          (entry) => `
+        .map(function (entry) {
 
+          return `
             <tr>
 
               <td>
@@ -822,11 +663,9 @@
               </td>
 
             </tr>
-
-          `
-        )
+          `;
+        })
         .join("");
-
   }
 
 
@@ -835,15 +674,14 @@
   ========================================================= */
 
   function renderHistoryTable() {
+    const body = $("historyTableBody");
 
-    const body =
-      $("historyTableBody");
-
-    if (!body) return;
+    if (!body) {
+      return;
+    }
 
 
     if (!entries.length) {
-
       body.innerHTML = `
         <tr>
           <td colspan="7" class="empty-row">
@@ -853,15 +691,14 @@
       `;
 
       return;
-
     }
 
 
     body.innerHTML =
       entries
-        .map(
-          (entry) => `
+        .map(function (entry) {
 
+          return `
             <tr>
 
               <td>
@@ -873,9 +710,13 @@
               </td>
 
               <td>
-                <span class="badge ${escapeHtml(entry.type)}">
+
+                <span
+                  class="badge ${escapeHtml(entry.type)}"
+                >
                   ${escapeHtml(entry.type)}
                 </span>
+
               </td>
 
               <td>
@@ -895,97 +736,74 @@
               </td>
 
             </tr>
-
-          `
-        )
+          `;
+        })
         .join("");
-
   }
 
 
   /* =========================================================
-     RENDER
+     RENDER EVERYTHING
   ========================================================= */
 
   function render() {
-
     renderStats();
-
     renderStockTable();
-
     renderReceivedTable();
-
     renderIssuedTable();
-
     renderHistoryTable();
-
   }
 
 
   /* =========================================================
-     FORM CONTROL
+     FORM FIELD CONTROL
   ========================================================= */
 
   function updateFormFields() {
-
-    const type =
-      $("type");
-
+    const type = $("type");
     const counterpartyLabel =
       $("counterpartyLabel");
-
     const adjustmentWrap =
       $("adjustmentWrap");
 
-
-    if (!type) return;
+    if (!type) {
+      return;
+    }
 
 
     if (adjustmentWrap) {
-
       adjustmentWrap.classList.toggle(
         "hidden",
         type.value !== "adjustment"
       );
-
     }
 
 
-    if (!counterpartyLabel) return;
+    if (!counterpartyLabel) {
+      return;
+    }
 
 
     let labelText = "Reference";
-
     let placeholder =
       "e.g. Manual adjustment";
 
 
-    if (
-      type.value === "received"
-    ) {
-
+    if (type.value === "received") {
       labelText = "Vendor name";
-
       placeholder =
         "e.g. ABC Supplies";
-
     }
 
 
-    if (
-      type.value === "issued"
-    ) {
-
+    if (type.value === "issued") {
       labelText = "Person name";
-
       placeholder =
         "e.g. Ahmed";
-
     }
 
 
     counterpartyLabel.innerHTML = `
-
       ${labelText}
 
       <input
@@ -994,113 +812,106 @@
         type="text"
         placeholder="${placeholder}"
       />
-
     `;
-
   }
 
 
   /* =========================================================
-     SAVE TRANSACTION TO SUPABASE
+     RESET MAIN FORM
+  ========================================================= */
+
+  function resetMainForm() {
+    $("ledgerForm")?.reset();
+
+    if ($("quantity")) {
+      $("quantity").value = "1";
+    }
+
+    if ($("unitPrice")) {
+      $("unitPrice").value = "0";
+    }
+
+    if ($("date")) {
+      $("date").value = today();
+    }
+
+    updateFormFields();
+  }
+
+
+  /* =========================================================
+     SAVE TRANSACTION
   ========================================================= */
 
   async function saveTransaction(event) {
-
     event.preventDefault();
 
 
     const product =
-      $("product")?.value.trim();
+      $("product")?.value.trim() || "";
 
     const type =
-      $("type")?.value ||
-      "received";
+      $("type")?.value || "received";
 
     const quantity =
-      Number(
-        $("quantity")?.value || 0
-      );
+      Number($("quantity")?.value || 0);
 
     const unitPrice =
-      Number(
-        $("unitPrice")?.value || 0
-      );
+      Number($("unitPrice")?.value || 0);
 
     const date =
-      $("date")?.value ||
-      today();
+      $("date")?.value || today();
 
     const counterparty =
-      $("counterparty")?.value.trim() ||
-      "";
+      $("counterparty")?.value.trim() || "";
 
     const note =
-      $("note")?.value.trim() ||
-      "";
+      $("note")?.value.trim() || "";
 
     const adjustmentDirection =
       $("adjustmentDirection")?.value ||
       "increase";
 
 
-    /* VALIDATION */
-
     if (!product) {
-
-      alert(
-        "Product name enter karein."
-      );
-
+      alert("Product name enter karein.");
       return;
-
     }
 
 
-    if (
-      !quantity ||
-      quantity <= 0
-    ) {
-
-      alert(
-        "Valid quantity enter karein."
-      );
-
+    if (!quantity || quantity <= 0) {
+      alert("Valid quantity enter karein.");
       return;
-
     }
 
 
-    /* =======================================================
+    /* =====================================================
        IMPORTANT:
-       Database mein sirf actual columns bheje ja rahe hain.
-       unitPrice ko remove kar diya gaya hai.
-    ======================================================= */
+       Only columns that actually exist in Supabase
+       are sent here.
+    ===================================================== */
 
     const row = {
+      id: generateId(),
 
-      id:
-        generateId(),
+      product: product,
 
-      product,
+      type: type,
 
-      type,
+      quantity: quantity,
 
-      quantity,
+      unit_price: unitPrice,
 
-      unit_price:
-        unitPrice,
+      date: date,
 
-      date,
+      counterparty: counterparty,
 
-      counterparty,
-
-      note,
+      note: note,
 
       adjustment_direction:
         type === "adjustment"
           ? adjustmentDirection
           : "increase"
-
     };
 
 
@@ -1108,145 +919,115 @@
       getSupabaseClient();
 
 
-    if (!client) {
+    /* =====================================================
+       SUPABASE SAVE
+    ===================================================== */
 
-      alert(
-        "Supabase load nahi hua. Internet/CDN check karein."
-      );
+    if (client) {
 
-      return;
+      try {
 
-    }
-
-
-    /* =======================================================
-       SUPABASE INSERT
-    ======================================================= */
-
-    try {
-
-      console.log(
-        "Saving transaction to Supabase:",
-        row
-      );
+        console.log(
+          "Saving transaction to Supabase:",
+          row
+        );
 
 
-      const {
-        data,
-        error
-      } = await client
-        .from("ledger_entries")
-        .insert([row])
-        .select()
-        .single();
+        const result =
+          await client
+            .from("ledger_entries")
+            .insert([row])
+            .select()
+            .single();
 
 
-      if (error) {
+        if (!result.error) {
+
+          console.log(
+            "Transaction saved to Supabase:",
+            result.data
+          );
+
+
+          alert(
+            "Transaction successfully save ho gayi."
+          );
+
+
+          resetMainForm();
+
+          await loadEntries();
+
+          return;
+        }
+
 
         console.error(
-          "SUPABASE INSERT ERROR:",
+          "Supabase INSERT error:",
+          result.error
+        );
+
+
+        alert(
+          "Supabase mein save nahi hua.\n\n" +
+          "Error: " +
+          result.error.message
+        );
+
+
+        return;
+
+      } catch (error) {
+
+        console.error(
+          "Supabase INSERT exception:",
           error
         );
 
 
         alert(
-          "Supabase save error:\n\n" +
+          "Supabase connection error.\n\n" +
           error.message
         );
 
+
         return;
-
       }
-
-
-      console.log(
-        "Transaction saved to Supabase:",
-        data
-      );
-
-
-      /* SAVE LOCAL CACHE */
-
-      const savedEntry =
-        normalizeEntry(data);
-
-
-      const localEntries =
-        readLocalEntries()
-          .map(normalizeEntry)
-          .filter(
-            (entry) =>
-              String(entry.id) !==
-              String(savedEntry.id)
-          );
-
-
-      saveLocalEntries([
-        savedEntry,
-        ...localEntries
-      ]);
-
-
-      entries = [
-        savedEntry,
-        ...entries.filter(
-          (entry) =>
-            String(entry.id) !==
-            String(savedEntry.id)
-        )
-      ];
-
-
-      render();
-
-
-      /* RESET FORM */
-
-      $("ledgerForm")?.reset();
-
-
-      if ($("quantity")) {
-        $("quantity").value = "1";
-      }
-
-
-      if ($("unitPrice")) {
-        $("unitPrice").value = "0";
-      }
-
-
-      if ($("date")) {
-        $("date").value = today();
-      }
-
-
-      updateFormFields();
-
-
-      alert(
-        "Transaction Supabase mein successfully save ho gayi."
-      );
-
-
-      /* REFRESH FROM DATABASE */
-
-      await loadEntries();
-
-    } catch (error) {
-
-      console.error(
-        "Unexpected Supabase error:",
-        error
-      );
-
-
-      alert(
-        "Supabase connection error:\n\n" +
-        error.message
-      );
-
     }
 
+
+    /* =====================================================
+       LOCAL FALLBACK
+    ===================================================== */
+
+    const localEntry =
+      normalizeEntry(row);
+
+    const nextEntries = [
+      localEntry,
+      ...readLocalEntries()
+        .map(normalizeEntry)
+    ];
+
+
+    saveLocalEntries(
+      nextEntries
+    );
+
+
+    entries =
+      nextEntries;
+
+
+    render();
+
+    alert(
+      "Supabase available nahi hai. " +
+      "Transaction locally save hui."
+    );
+
+
+    resetMainForm();
   }
 
 
@@ -1262,97 +1043,106 @@
       );
 
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      return;
+    }
 
 
     const client =
       getSupabaseClient();
 
 
-    if (!client) {
+    if (client) {
 
-      alert(
-        "Supabase connection available nahi hai."
-      );
+      try {
 
-      return;
-
-    }
-
-
-    try {
-
-      const {
-        error
-      } = await client
-        .from("ledger_entries")
-        .delete()
-        .eq("id", id);
+        const result =
+          await client
+            .from("ledger_entries")
+            .delete()
+            .eq("id", id);
 
 
-      if (error) {
+        if (!result.error) {
+
+          alert(
+            "Record successfully delete ho gaya."
+          );
+
+          await loadEntries();
+
+          return;
+        }
+
 
         console.error(
-          "Delete error:",
-          error
+          "Supabase DELETE error:",
+          result.error
         );
 
+
         alert(
-          "Delete error:\n\n" +
-          error.message
+          "Record delete nahi hua.\n\n" +
+          result.error.message
         );
+
 
         return;
 
+      } catch (error) {
+
+        console.error(
+          "Delete exception:",
+          error
+        );
+
+
+        alert(
+          "Supabase delete error.\n\n" +
+          error.message
+        );
+
+
+        return;
       }
-
-
-      await loadEntries();
-
-
-      alert(
-        "Record successfully delete ho gaya."
-      );
-
-    } catch (error) {
-
-      console.error(
-        "Delete failed:",
-        error
-      );
-
-      alert(
-        "Delete error:\n\n" +
-        error.message
-      );
-
     }
 
+
+    /* LOCAL DELETE */
+
+    const nextEntries =
+      readLocalEntries()
+        .map(normalizeEntry)
+        .filter(function (entry) {
+          return String(entry.id) !==
+            String(id);
+        });
+
+
+    saveLocalEntries(nextEntries);
+
+    entries = nextEntries;
+
+    render();
   }
 
 
   /* =========================================================
-     EDIT FORM
+     OPEN EDIT FORM
   ========================================================= */
 
   function openEditForm(id) {
 
     const entry =
-      entries.find(
-        (item) =>
-          String(item.id) ===
-          String(id)
-      );
+      entries.find(function (item) {
+        return String(item.id) ===
+          String(id);
+      });
 
 
     if (!entry) {
-
-      alert(
-        "Record nahi mila."
-      );
-
+      alert("Record nahi mila.");
       return;
-
     }
 
 
@@ -1361,81 +1151,86 @@
 
 
     if (!panel) {
-
       alert(
-        "Edit form page par nahi mila."
+        "Edit form page par available nahi hai."
       );
 
       return;
-
     }
 
 
-    if ($("editEntryId"))
+    if ($("editEntryId")) {
       $("editEntryId").value =
         entry.id;
+    }
 
 
-    if ($("editProduct"))
+    if ($("editProduct")) {
       $("editProduct").value =
         entry.product;
+    }
 
 
-    if ($("editType"))
+    if ($("editType")) {
       $("editType").value =
         entry.type;
+    }
 
 
-    if ($("editCounterparty"))
+    if ($("editCounterparty")) {
       $("editCounterparty").value =
         entry.counterparty;
+    }
 
 
-    if ($("editQuantity"))
+    if ($("editQuantity")) {
       $("editQuantity").value =
         entry.quantity;
+    }
 
 
-    if ($("editUnitPrice"))
+    if ($("editUnitPrice")) {
       $("editUnitPrice").value =
         entry.unitPrice;
+    }
 
 
-    if ($("editDate"))
+    if ($("editDate")) {
       $("editDate").value =
         entry.date;
+    }
 
 
-    if ($("editNote"))
+    if ($("editNote")) {
       $("editNote").value =
         entry.note;
+    }
 
 
-    if ($("editAdjustmentDirection"))
+    if ($("editAdjustmentDirection")) {
       $("editAdjustmentDirection").value =
         entry.adjustmentDirection;
+    }
 
 
-    if ($("editMode"))
+    if ($("editMode")) {
       $("editMode").value =
         entry.type;
+    }
 
 
-    panel.classList.remove(
-      "hidden"
-    );
+    panel.classList.remove("hidden");
 
 
     panel.scrollIntoView({
       behavior: "smooth",
       block: "start"
     });
-
   }
 
 
   /* =========================================================
-     UPDATE ENTRY IN SUPABASE
+     UPDATE ENTRY
   ========================================================= */
 
   async function updateEntry(event) {
@@ -1448,18 +1243,13 @@
 
 
     if (!id) {
-
-      alert(
-        "Record ID missing."
-      );
-
+      alert("Record ID missing.");
       return;
-
     }
 
 
     const product =
-      $("editProduct")?.value.trim();
+      $("editProduct")?.value.trim() || "";
 
     const type =
       $("editType")?.value ||
@@ -1493,54 +1283,39 @@
 
 
     if (!product) {
-
-      alert(
-        "Product name enter karein."
-      );
-
+      alert("Product name enter karein.");
       return;
-
     }
 
 
-    if (
-      !quantity ||
-      quantity <= 0
-    ) {
-
-      alert(
-        "Valid quantity enter karein."
-      );
-
+    if (!quantity || quantity <= 0) {
+      alert("Valid quantity enter karein.");
       return;
-
     }
 
 
-    /* ONLY REAL DATABASE COLUMNS */
+    /* Only actual Supabase columns */
 
     const updates = {
 
-      product,
+      product: product,
 
-      type,
+      type: type,
 
-      counterparty,
+      counterparty: counterparty,
 
-      quantity,
+      quantity: quantity,
 
-      unit_price:
-        unitPrice,
+      unit_price: unitPrice,
 
-      date,
+      date: date,
 
-      note,
+      note: note,
 
       adjustment_direction:
         type === "adjustment"
           ? adjustmentDirection
           : "increase"
-
     };
 
 
@@ -1548,67 +1323,102 @@
       getSupabaseClient();
 
 
-    if (!client) {
+    if (client) {
 
-      alert(
-        "Supabase connection available nahi hai."
-      );
+      try {
 
-      return;
-
-    }
-
-
-    try {
-
-      const {
-        error
-      } = await client
-        .from("ledger_entries")
-        .update(updates)
-        .eq("id", id);
+        const result =
+          await client
+            .from("ledger_entries")
+            .update(updates)
+            .eq("id", id)
+            .select()
+            .single();
 
 
-      if (error) {
+        if (!result.error) {
+
+          alert(
+            "Record successfully update ho gaya."
+          );
+
+
+          closeEditForm();
+
+          await loadEntries();
+
+          return;
+        }
+
 
         console.error(
-          "Update error:",
-          error
+          "Supabase UPDATE error:",
+          result.error
         );
 
+
         alert(
-          "Update error:\n\n" +
-          error.message
+          "Record update nahi hua.\n\n" +
+          result.error.message
         );
+
 
         return;
 
+      } catch (error) {
+
+        console.error(
+          "Update exception:",
+          error
+        );
+
+
+        alert(
+          "Supabase update error.\n\n" +
+          error.message
+        );
+
+
+        return;
       }
-
-
-      alert(
-        "Record Supabase mein successfully update ho gaya."
-      );
-
-
-      closeEditForm();
-
-      await loadEntries();
-
-    } catch (error) {
-
-      console.error(
-        "Update failed:",
-        error
-      );
-
-      alert(
-        "Update error:\n\n" +
-        error.message
-      );
-
     }
 
+
+    /* LOCAL UPDATE */
+
+    const nextEntries =
+      readLocalEntries()
+        .map(normalizeEntry)
+        .map(function (entry) {
+
+          if (
+            String(entry.id) ===
+            String(id)
+          ) {
+
+            return normalizeEntry({
+              ...entry,
+              ...updates,
+              id: id
+            });
+          }
+
+
+          return entry;
+        });
+
+
+    saveLocalEntries(nextEntries);
+
+    entries = nextEntries;
+
+    render();
+
+    closeEditForm();
+
+    alert(
+      "Record updated locally."
+    );
   }
 
 
@@ -1622,22 +1432,22 @@
       $("editFormPanel");
 
 
-    if (!panel) return;
+    if (!panel) {
+      return;
+    }
 
 
-    panel.classList.add(
-      "hidden"
-    );
+    panel.classList.add("hidden");
 
 
-    $("editForm")
-      ?.reset();
-
+    if ($("editForm")) {
+      $("editForm").reset();
+    }
   }
 
 
   /* =========================================================
-     TABLE BUTTON ACTIONS
+     TABLE ACTIONS
   ========================================================= */
 
   function setupTableActions() {
@@ -1655,7 +1465,7 @@
 
     document.addEventListener(
       "click",
-      (event) => {
+      function (event) {
 
         const target =
           event.target;
@@ -1669,9 +1479,7 @@
 
 
         const editButton =
-          target.closest(
-            ".edit-btn"
-          );
+          target.closest(".edit-btn");
 
 
         if (editButton) {
@@ -1681,7 +1489,6 @@
           );
 
           return;
-
         }
 
 
@@ -1696,12 +1503,9 @@
           deleteEntry(
             deleteButton.dataset.id
           );
-
         }
-
       }
     );
-
   }
 
 
@@ -1714,10 +1518,7 @@
     /* DATE */
 
     if ($("date")) {
-
-      $("date").value =
-        today();
-
+      $("date").value = today();
     }
 
 
@@ -1731,7 +1532,6 @@
       );
 
       updateFormFields();
-
     }
 
 
@@ -1743,7 +1543,6 @@
         "submit",
         saveTransaction
       );
-
     }
 
 
@@ -1755,7 +1554,6 @@
         "submit",
         updateEntry
       );
-
     }
 
 
@@ -1767,7 +1565,6 @@
         "click",
         closeEditForm
       );
-
     }
 
 
@@ -1776,12 +1573,14 @@
     setupTableActions();
 
 
-    /* LOAD */
+    /* LOAD SUPABASE DATA */
 
     await loadEntries();
 
 
-    /* AUTO REFRESH */
+    /* =====================================================
+       AUTO REFRESH
+    ===================================================== */
 
     if (
       !window.__stockLedgerRefreshStarted
@@ -1793,12 +1592,12 @@
 
       window.__stockLedgerRefreshTimer =
         setInterval(
-          loadEntries,
+          function () {
+            loadEntries();
+          },
           10000
         );
-
     }
-
   }
 
 
@@ -1821,9 +1620,7 @@
   } else {
 
     initializeApp();
-
   }
-
 
 })();
 ```
