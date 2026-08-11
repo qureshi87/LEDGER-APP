@@ -1,353 +1,94 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Received Stock | Stock Ledger</title>
+  <title>Stock Ledger - Received</title>
 
-    <link rel="stylesheet" href="styles.css" />
-  </head>
+  <link rel="stylesheet" href="./styles.css">
+</head>
 
-  <body data-page="received">
+<body>
 
-    <div class="app-shell">
+  <div class="app-shell">
 
-      <header class="topbar">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Inventory Management</p>
+        <h1>Received Stock</h1>
+        <p class="subtitle">
+          Stock received from vendors
+        </p>
+      </div>
+    </header>
 
-        <div>
-          <p class="eyebrow">Inventory records</p>
-          <h1>Stock Received</h1>
+    <nav class="main-nav">
+
+      <a href="./index.html">
+        Dashboard
+      </a>
+
+      <a href="./received.html" class="active">
+        Received
+      </a>
+
+      <a href="./issued.html">
+        Issued
+      </a>
+
+      <a href="./history.html">
+        History
+      </a>
+
+    </nav>
+
+    <main>
+
+      <section class="panel">
+
+        <div class="section-header">
+          <h2>Received Stock</h2>
         </div>
 
-        <nav class="main-nav" aria-label="Main menu">
+        <div class="table-wrap">
 
-          <a
-            class="nav-link"
-            href="index.html"
-          >
-            Dashboard
-          </a>
+          <table>
 
-          <a
-            class="nav-link active"
-            href="received.html"
-          >
-            Received
-          </a>
+            <thead>
 
-          <a
-            class="nav-link"
-            href="issued.html"
-          >
-            Issued
-          </a>
+              <tr>
+                <th>Date</th>
+                <th>Product</th>
+                <th>Vendor</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Total</th>
+              </tr>
 
-          <a
-            class="nav-link"
-            href="history.html"
-          >
-            History
-          </a>
+            </thead>
 
-        </nav>
+            <tbody id="receivedTableBody">
 
-      </header>
+              <tr>
+                <td colspan="6">
+                  No received stock yet.
+                </td>
+              </tr>
 
-      <main>
+            </tbody>
 
-        <!-- =========================
-             EDIT RECEIVED STOCK
-        ========================== -->
+          </table>
 
-        <section
-          id="editFormPanel"
-          class="panel hidden"
-        >
+        </div>
 
-          <div class="section-header">
+      </section>
 
-            <h2>
-              Edit received stock
-            </h2>
+    </main>
 
-          </div>
+  </div>
 
-          <form id="editForm">
+  <script src="./app.js"></script>
 
-            <input
-              id="editEntryId"
-              type="hidden"
-            />
-
-            <input
-              id="editMode"
-              type="hidden"
-              value="received"
-            />
-
-            <div class="field-row">
-
-              <label>
-
-                Product name
-
-                <input
-                  id="editProduct"
-                  type="text"
-                  required
-                />
-
-              </label>
-
-
-              <label>
-
-                Type
-
-                <select id="editType">
-
-                  <option value="received">
-                    Received from vendor
-                  </option>
-
-                  <option value="issued">
-                    Issued to person
-                  </option>
-
-                  <option value="adjustment">
-                    Adjustment
-                  </option>
-
-                </select>
-
-              </label>
-
-
-              <label>
-
-                Vendor / Person
-
-                <input
-                  id="editCounterparty"
-                  type="text"
-                />
-
-              </label>
-
-            </div>
-
-
-            <div class="field-row">
-
-              <label>
-
-                Quantity
-
-                <input
-                  id="editQuantity"
-                  type="number"
-                  min="1"
-                  step="1"
-                  required
-                />
-
-              </label>
-
-
-              <label>
-
-                Unit price (PKR)
-
-                <input
-                  id="editUnitPrice"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value="0"
-                />
-
-              </label>
-
-
-              <label>
-
-                Date
-
-                <input
-                  id="editDate"
-                  type="date"
-                  required
-                />
-
-              </label>
-
-            </div>
-
-
-            <div class="field-row">
-
-              <label>
-
-                Adjustment
-
-                <select
-                  id="editAdjustmentDirection"
-                >
-
-                  <option value="increase">
-                    Increase stock
-                  </option>
-
-                  <option value="decrease">
-                    Decrease stock
-                  </option>
-
-                </select>
-
-              </label>
-
-            </div>
-
-
-            <label>
-
-              Notes
-
-              <textarea
-                id="editNote"
-                rows="3"
-              ></textarea>
-
-            </label>
-
-
-            <div class="form-actions">
-
-              <button
-                type="button"
-                id="cancelEditBtn"
-                class="secondary"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                class="primary"
-              >
-                Update record
-              </button>
-
-            </div>
-
-          </form>
-
-        </section>
-
-
-        <!-- =========================
-             RECEIVED STOCK TABLE
-        ========================== -->
-
-        <section class="panel">
-
-          <div class="section-header">
-
-            <h2>
-              Received stock
-            </h2>
-
-          </div>
-
-
-          <div class="table-wrap">
-
-            <table>
-
-              <thead>
-
-                <tr>
-
-                  <th>
-                    Date
-                  </th>
-
-                  <th>
-                    Product
-                  </th>
-
-                  <th>
-                    Qty
-                  </th>
-
-                  <th>
-                    Price
-                  </th>
-
-                  <th>
-                    Vendor
-                  </th>
-
-                  <th>
-                    Notes
-                  </th>
-
-                  <th>
-                    Action
-                  </th>
-
-                </tr>
-
-              </thead>
-
-
-              <tbody
-                id="receivedTableBody"
-              >
-
-                <!-- Supabase data will appear here -->
-
-              </tbody>
-
-            </table>
-
-          </div>
-
-        </section>
-
-      </main>
-
-    </div>
-
-
-    <!-- =========================
-         SUPABASE
-    ========================== -->
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-
-    <script>
-
-      const SUPABASE_URL =
-        "https://rfpvwhqzixqqtvaqktpr.supabase.co";
-
-      const SUPABASE_ANON_KEY =
-        "sb_publishable_xD8zJ6wUrr_37pwaPak6cg_7hY5CbfC";
-
-      const supabaseClient =
-        window.supabase.createClient(
-          SUPABASE_URL,
-          SUPABASE_ANON_KEY
-        );
-
-    </script>
-
-
-    <!-- MAIN APP -->
-
-    <script src="app.js"></script>
-
-  </body>
+</body>
 </html>

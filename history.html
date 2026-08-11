@@ -3,98 +3,87 @@
 
 <head>
 
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
 
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0"
-  />
+  >
 
-  <title>History | Stock Ledger</title>
+  <title>Stock Ledger - History</title>
 
   <link
     rel="stylesheet"
-    href="styles.css"
-  />
+    href="./styles.css"
+  >
 
 </head>
 
 
-<body data-page="history">
+<body>
 
   <div class="app-shell">
 
 
-    <!-- =========================
+    <!-- =================================================
          HEADER
-    ========================== -->
+    ================================================== -->
 
     <header class="topbar">
 
       <div>
 
         <p class="eyebrow">
-          Audit log
+          Inventory Management
         </p>
 
         <h1>
-          Stock History
+          Transaction History
         </h1>
 
+        <p class="subtitle">
+          Complete stock movement history
+        </p>
+
       </div>
-
-
-      <!-- =========================
-           NAVIGATION
-      ========================== -->
-
-      <nav
-        class="main-nav"
-        aria-label="Main menu"
-      >
-
-        <a
-          class="nav-link"
-          href="index.html"
-        >
-          Dashboard
-        </a>
-
-
-        <a
-          class="nav-link"
-          href="received.html"
-        >
-          Received
-        </a>
-
-
-        <a
-          class="nav-link"
-          href="issued.html"
-        >
-          Issued
-        </a>
-
-
-        <a
-          class="nav-link active"
-          href="history.html"
-        >
-          History
-        </a>
-
-      </nav>
 
     </header>
 
 
+    <!-- =================================================
+         NAVIGATION
+    ================================================== -->
+
+    <nav class="main-nav">
+
+      <a href="./index.html">
+        Dashboard
+      </a>
+
+      <a href="./received.html">
+        Received
+      </a>
+
+      <a href="./issued.html">
+        Issued
+      </a>
+
+      <a
+        href="./history.html"
+        class="active"
+      >
+        History
+      </a>
+
+    </nav>
+
+
+    <!-- =================================================
+         MAIN
+    ================================================== -->
+
     <main>
 
-
-      <!-- =========================
-           COMPLETE HISTORY
-      ========================== -->
 
       <section class="panel">
 
@@ -102,7 +91,7 @@
         <div class="section-header">
 
           <h2>
-            Complete record history
+            All Transactions
           </h2>
 
         </div>
@@ -131,15 +120,19 @@
                 </th>
 
                 <th>
-                  Qty
+                  Counterparty
                 </th>
 
                 <th>
-                  Price
+                  Quantity
                 </th>
 
                 <th>
-                  Vendor / Person
+                  Unit Price
+                </th>
+
+                <th>
+                  Total
                 </th>
 
                 <th>
@@ -151,11 +144,15 @@
             </thead>
 
 
-            <tbody
-              id="historyTableBody"
-            >
+            <tbody id="historyTableBody">
 
-              <!-- Supabase history will appear here -->
+              <tr>
+
+                <td colspan="8">
+                  No transactions yet.
+                </td>
+
+              </tr>
 
             </tbody>
 
@@ -171,46 +168,17 @@
 
     </main>
 
+
   </div>
 
 
-  <!-- =========================
-       SUPABASE LIBRARY
-  ========================== -->
+  <!-- =================================================
+       APPLICATION
+  ================================================== -->
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-
-  <!-- =========================
-       SUPABASE CONNECTION
-  ========================== -->
-
-  <script>
-
-    const SUPABASE_URL =
-      "https://rfpvwhqzixqqtvaqktpr.supabase.co";
-
-    const SUPABASE_ANON_KEY =
-      "sb_publishable_xD8zJ6wUrr_37pwaPak6cg_7hY5CbfC";
-
-    const supabaseClient =
-      window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY
-      );
-
-  </script>
-
-
-  <!-- =========================
-       MAIN APP
-  ========================== -->
-
-  <script src="app.js"></script>
+  <script src="./app.js"></script>
 
 
 </body>
 
 </html>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="app.js"></script>
