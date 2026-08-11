@@ -1,13 +1,14 @@
-﻿/* =========================================================
+﻿```javascript
+/* =========================================================
    STOCK LEDGER
-   Safe browser app with Supabase + local fallback
+   SUPABASE FIRST + LOCAL FALLBACK
    ========================================================= */
 
 (function () {
   "use strict";
 
   /* =========================================================
-     PREVENT APP FROM LOADING TWICE
+     PREVENT DOUBLE LOAD
   ========================================================= */
 
   if (window.__stockLedgerAppLoaded) {
@@ -19,7 +20,7 @@
 
 
   /* =========================================================
-     CONFIGURATION
+     CONFIG
   ========================================================= */
 
   const STORAGE_KEY = "stock-ledger-entries-v1";
@@ -143,7 +144,7 @@
 
     } catch (error) {
 
-      console.warn(
+      console.error(
         "Local storage read failed:",
         error
       );
@@ -166,7 +167,7 @@
 
     } catch (error) {
 
-      console.warn(
+      console.error(
         "Local storage write failed:",
         error
       );
@@ -177,7 +178,7 @@
 
 
   /* =========================================================
-     NORMALIZE ENTRY
+     NORMALIZE DATABASE ROW
   ========================================================= */
 
   function normalizeEntry(row = {}) {
@@ -204,9 +205,7 @@
 
       unitPrice:
         Number(
-          row.unit_price ??
-          row.unitPrice ??
-          0
+          row.unit_price || 0
         ),
 
       date:
@@ -224,13 +223,11 @@
         ).trim(),
 
       adjustmentDirection:
-        row.adjustment_direction ??
-        row.adjustmentDirection ??
+        row.adjustment_direction ||
         "increase",
 
       createdAt:
-        row.created_at ??
-        row.createdAt ??
+        row.created_at ||
         new Date().toISOString()
 
     };
@@ -239,7 +236,7 @@
 
 
   /* =========================================================
-     LOAD DATA
+     LOAD ENTRIES FROM SUPABASE
   ========================================================= */
 
   async function loadEntries() {
@@ -249,7 +246,7 @@
 
 
     /* -------------------------------------------------------
-       SUPABASE
+       SUPABASE AVAILABLE
     ------------------------------------------------------- */
 
     if (client) {
@@ -276,10 +273,7 @@
           );
 
 
-        if (
-          !error &&
-          Array.isArray(data)
-        ) {
+        if (!error && Array.isArray(data)) {
 
           entries =
             data.map(
@@ -292,20 +286,20 @@
 
           render();
 
-          return;
+          return true;
 
         }
 
 
-        console.warn(
-          "Supabase load failed, using local storage:",
+        console.error(
+          "Supabase load error:",
           error
         );
 
       } catch (error) {
 
         console.error(
-          "Supabase connection failed:",
+          "Supabase connection error:",
           error
         );
 
@@ -315,7 +309,7 @@
 
 
     /* -------------------------------------------------------
-       LOCAL FALLBACK
+       LOCAL FALLBACK ONLY WHEN SUPABASE IS UNAVAILABLE
     ------------------------------------------------------- */
 
     entries =
@@ -323,6 +317,8 @@
         .map(normalizeEntry);
 
     render();
+
+    return false;
 
   }
 
@@ -542,19 +538,15 @@
 
     if ($("inventoryValue")) {
 
-      $("inventoryValue")
-        .textContent =
-        money(
-          inventoryValue
-        );
+      $("inventoryValue").textContent =
+        money(inventoryValue);
 
     }
 
 
     if ($("itemsInStock")) {
 
-      $("itemsInStock")
-        .textContent =
+      $("itemsInStock").textContent =
         itemsInStock;
 
     }
@@ -562,22 +554,16 @@
 
     if ($("purchaseCost")) {
 
-      $("purchaseCost")
-        .textContent =
-        money(
-          receivedValue
-        );
+      $("purchaseCost").textContent =
+        money(receivedValue);
 
     }
 
 
     if ($("salesRevenue")) {
 
-      $("salesRevenue")
-        .textContent =
-        money(
-          issuedValue
-        );
+      $("salesRevenue").textContent =
+        money(issuedValue);
 
     }
 
@@ -593,10 +579,7 @@
     const body =
       $("stockTableBody");
 
-
-    if (!body) {
-      return;
-    }
+    if (!body) return;
 
 
     const inventory =
@@ -616,10 +599,7 @@
 
       body.innerHTML = `
         <tr>
-          <td
-            colspan="4"
-            class="empty-row"
-          >
+          <td colspan="4" class="empty-row">
             No stock available
           </td>
         </tr>
@@ -646,15 +626,11 @@
               </td>
 
               <td>
-                ${money(
-                  item.averageCost
-                )}
+                ${money(item.averageCost)}
               </td>
 
               <td>
-                ${money(
-                  item.stockValue
-                )}
+                ${money(item.stockValue)}
               </td>
 
             </tr>
@@ -675,10 +651,7 @@
     const body =
       $("receivedTableBody");
 
-
-    if (!body) {
-      return;
-    }
+    if (!body) return;
 
 
     const received =
@@ -692,10 +665,7 @@
 
       body.innerHTML = `
         <tr>
-          <td
-            colspan="7"
-            class="empty-row"
-          >
+          <td colspan="7" class="empty-row">
             No received stock records
           </td>
         </tr>
@@ -714,15 +684,11 @@
             <tr>
 
               <td>
-                ${escapeHtml(
-                  entry.date
-                )}
+                ${escapeHtml(entry.date)}
               </td>
 
               <td>
-                ${escapeHtml(
-                  entry.product
-                )}
+                ${escapeHtml(entry.product)}
               </td>
 
               <td>
@@ -730,21 +696,15 @@
               </td>
 
               <td>
-                ${money(
-                  entry.unitPrice
-                )}
+                ${money(entry.unitPrice)}
               </td>
 
               <td>
-                ${escapeHtml(
-                  entry.counterparty
-                )}
+                ${escapeHtml(entry.counterparty)}
               </td>
 
               <td>
-                ${escapeHtml(
-                  entry.note
-                )}
+                ${escapeHtml(entry.note)}
               </td>
 
               <td>
@@ -785,10 +745,7 @@
     const body =
       $("issuedTableBody");
 
-
-    if (!body) {
-      return;
-    }
+    if (!body) return;
 
 
     const issued =
@@ -802,10 +759,7 @@
 
       body.innerHTML = `
         <tr>
-          <td
-            colspan="7"
-            class="empty-row"
-          >
+          <td colspan="7" class="empty-row">
             No issued stock records
           </td>
         </tr>
@@ -824,15 +778,11 @@
             <tr>
 
               <td>
-                ${escapeHtml(
-                  entry.date
-                )}
+                ${escapeHtml(entry.date)}
               </td>
 
               <td>
-                ${escapeHtml(
-                  entry.product
-                )}
+                ${escapeHtml(entry.product)}
               </td>
 
               <td>
@@ -840,21 +790,15 @@
               </td>
 
               <td>
-                ${money(
-                  entry.unitPrice
-                )}
+                ${money(entry.unitPrice)}
               </td>
 
               <td>
-                ${escapeHtml(
-                  entry.counterparty
-                )}
+                ${escapeHtml(entry.counterparty)}
               </td>
 
               <td>
-                ${escapeHtml(
-                  entry.note
-                )}
+                ${escapeHtml(entry.note)}
               </td>
 
               <td>
@@ -895,20 +839,14 @@
     const body =
       $("historyTableBody");
 
-
-    if (!body) {
-      return;
-    }
+    if (!body) return;
 
 
     if (!entries.length) {
 
       body.innerHTML = `
         <tr>
-          <td
-            colspan="7"
-            class="empty-row"
-          >
+          <td colspan="7" class="empty-row">
             No history available
           </td>
         </tr>
@@ -927,29 +865,17 @@
             <tr>
 
               <td>
-                ${escapeHtml(
-                  entry.date
-                )}
+                ${escapeHtml(entry.date)}
               </td>
 
               <td>
-                ${escapeHtml(
-                  entry.product
-                )}
+                ${escapeHtml(entry.product)}
               </td>
 
               <td>
-
-                <span
-                  class="badge ${escapeHtml(
-                    entry.type
-                  )}"
-                >
-                  ${escapeHtml(
-                    entry.type
-                  )}
+                <span class="badge ${escapeHtml(entry.type)}">
+                  ${escapeHtml(entry.type)}
                 </span>
-
               </td>
 
               <td>
@@ -957,21 +883,15 @@
               </td>
 
               <td>
-                ${money(
-                  entry.unitPrice
-                )}
+                ${money(entry.unitPrice)}
               </td>
 
               <td>
-                ${escapeHtml(
-                  entry.counterparty
-                )}
+                ${escapeHtml(entry.counterparty)}
               </td>
 
               <td>
-                ${escapeHtml(
-                  entry.note
-                )}
+                ${escapeHtml(entry.note)}
               </td>
 
             </tr>
@@ -984,7 +904,7 @@
 
 
   /* =========================================================
-     RENDER EVERYTHING
+     RENDER
   ========================================================= */
 
   function render() {
@@ -1003,7 +923,7 @@
 
 
   /* =========================================================
-     FORM FIELD CONTROL
+     FORM CONTROL
   ========================================================= */
 
   function updateFormFields() {
@@ -1018,9 +938,7 @@
       $("adjustmentWrap");
 
 
-    if (!type) {
-      return;
-    }
+    if (!type) return;
 
 
     if (adjustmentWrap) {
@@ -1033,13 +951,10 @@
     }
 
 
-    if (!counterpartyLabel) {
-      return;
-    }
+    if (!counterpartyLabel) return;
 
 
-    let labelText =
-      "Reference";
+    let labelText = "Reference";
 
     let placeholder =
       "e.g. Manual adjustment";
@@ -1049,8 +964,7 @@
       type.value === "received"
     ) {
 
-      labelText =
-        "Vendor name";
+      labelText = "Vendor name";
 
       placeholder =
         "e.g. ABC Supplies";
@@ -1058,12 +972,11 @@
     }
 
 
-    else if (
+    if (
       type.value === "issued"
     ) {
 
-      labelText =
-        "Person name";
+      labelText = "Person name";
 
       placeholder =
         "e.g. Ahmed";
@@ -1088,7 +1001,7 @@
 
 
   /* =========================================================
-     SAVE TRANSACTION
+     SAVE TRANSACTION TO SUPABASE
   ========================================================= */
 
   async function saveTransaction(event) {
@@ -1130,6 +1043,8 @@
       "increase";
 
 
+    /* VALIDATION */
+
     if (!product) {
 
       alert(
@@ -1155,6 +1070,12 @@
     }
 
 
+    /* =======================================================
+       IMPORTANT:
+       Database mein sirf actual columns bheje ja rahe hain.
+       unitPrice ko remove kar diya gaya hai.
+    ======================================================= */
+
     const row = {
 
       id:
@@ -1168,8 +1089,6 @@
 
       unit_price:
         unitPrice,
-
-      unitPrice,
 
       date,
 
@@ -1189,121 +1108,144 @@
       getSupabaseClient();
 
 
-    /* -------------------------------------------------------
-       SAVE TO SUPABASE
-    ------------------------------------------------------- */
+    if (!client) {
 
-    if (client) {
+      alert(
+        "Supabase load nahi hua. Internet/CDN check karein."
+      );
 
-      try {
+      return;
 
-        const {
-          error
-        } = await client
-          .from("ledger_entries")
-          .insert([row]);
+    }
 
 
-        if (!error) {
+    /* =======================================================
+       SUPABASE INSERT
+    ======================================================= */
 
-          alert(
-            "Transaction successfully save ho gayi."
-          );
+    try {
 
-
-          $("ledgerForm")?.reset();
-
-
-          if ($("quantity")) {
-            $("quantity").value = "1";
-          }
+      console.log(
+        "Saving transaction to Supabase:",
+        row
+      );
 
 
-          if ($("unitPrice")) {
-            $("unitPrice").value = "0";
-          }
+      const {
+        data,
+        error
+      } = await client
+        .from("ledger_entries")
+        .insert([row])
+        .select()
+        .single();
 
 
-          if ($("date")) {
-            $("date").value =
-              today();
-          }
-
-
-          updateFormFields();
-
-          await loadEntries();
-
-          return;
-
-        }
-
+      if (error) {
 
         console.error(
-          "Insert error:",
+          "SUPABASE INSERT ERROR:",
           error
         );
 
-      } catch (error) {
 
-        console.error(
-          "Supabase insert failed:",
-          error
+        alert(
+          "Supabase save error:\n\n" +
+          error.message
         );
+
+        return;
 
       }
 
+
+      console.log(
+        "Transaction saved to Supabase:",
+        data
+      );
+
+
+      /* SAVE LOCAL CACHE */
+
+      const savedEntry =
+        normalizeEntry(data);
+
+
+      const localEntries =
+        readLocalEntries()
+          .map(normalizeEntry)
+          .filter(
+            (entry) =>
+              String(entry.id) !==
+              String(savedEntry.id)
+          );
+
+
+      saveLocalEntries([
+        savedEntry,
+        ...localEntries
+      ]);
+
+
+      entries = [
+        savedEntry,
+        ...entries.filter(
+          (entry) =>
+            String(entry.id) !==
+            String(savedEntry.id)
+        )
+      ];
+
+
+      render();
+
+
+      /* RESET FORM */
+
+      $("ledgerForm")?.reset();
+
+
+      if ($("quantity")) {
+        $("quantity").value = "1";
+      }
+
+
+      if ($("unitPrice")) {
+        $("unitPrice").value = "0";
+      }
+
+
+      if ($("date")) {
+        $("date").value = today();
+      }
+
+
+      updateFormFields();
+
+
+      alert(
+        "Transaction Supabase mein successfully save ho gayi."
+      );
+
+
+      /* REFRESH FROM DATABASE */
+
+      await loadEntries();
+
+    } catch (error) {
+
+      console.error(
+        "Unexpected Supabase error:",
+        error
+      );
+
+
+      alert(
+        "Supabase connection error:\n\n" +
+        error.message
+      );
+
     }
-
-
-    /* -------------------------------------------------------
-       LOCAL FALLBACK
-    ------------------------------------------------------- */
-
-    const nextEntries = [
-      normalizeEntry(row),
-      ...readLocalEntries()
-        .map(normalizeEntry)
-    ];
-
-
-    saveLocalEntries(
-      nextEntries
-    );
-
-
-    entries =
-      nextEntries;
-
-
-    render();
-
-
-    alert(
-      "Transaction saved locally."
-    );
-
-
-    $("ledgerForm")?.reset();
-
-
-    if ($("quantity")) {
-      $("quantity").value = "1";
-    }
-
-
-    if ($("unitPrice")) {
-      $("unitPrice").value = "0";
-    }
-
-
-    if ($("date")) {
-      $("date").value =
-        today();
-    }
-
-
-    updateFormFields();
 
   }
 
@@ -1320,73 +1262,71 @@
       );
 
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
 
     const client =
       getSupabaseClient();
 
 
-    if (client) {
+    if (!client) {
 
-      try {
+      alert(
+        "Supabase connection available nahi hai."
+      );
 
-        const {
-          error
-        } = await client
-          .from("ledger_entries")
-          .delete()
-          .eq("id", id);
+      return;
+
+    }
 
 
-        if (!error) {
+    try {
 
-          await loadEntries();
+      const {
+        error
+      } = await client
+        .from("ledger_entries")
+        .delete()
+        .eq("id", id);
 
-          return;
 
-        }
-
+      if (error) {
 
         console.error(
           "Delete error:",
           error
         );
 
-      } catch (error) {
-
-        console.error(
-          "Supabase delete failed:",
-          error
+        alert(
+          "Delete error:\n\n" +
+          error.message
         );
+
+        return;
 
       }
 
+
+      await loadEntries();
+
+
+      alert(
+        "Record successfully delete ho gaya."
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Delete failed:",
+        error
+      );
+
+      alert(
+        "Delete error:\n\n" +
+        error.message
+      );
+
     }
-
-
-    const nextEntries =
-      readLocalEntries()
-        .map(normalizeEntry)
-        .filter(
-          (entry) =>
-            String(entry.id) !==
-            String(id)
-        );
-
-
-    saveLocalEntries(
-      nextEntries
-    );
-
-
-    entries =
-      nextEntries;
-
-
-    render();
 
   }
 
@@ -1421,75 +1361,64 @@
 
 
     if (!panel) {
+
+      alert(
+        "Edit form page par nahi mila."
+      );
+
       return;
+
     }
 
 
-    if ($("editEntryId")) {
+    if ($("editEntryId"))
       $("editEntryId").value =
         entry.id;
-    }
 
 
-    if ($("editProduct")) {
+    if ($("editProduct"))
       $("editProduct").value =
         entry.product;
-    }
 
 
-    if ($("editType")) {
+    if ($("editType"))
       $("editType").value =
         entry.type;
-    }
 
 
-    if ($("editCounterparty")) {
+    if ($("editCounterparty"))
       $("editCounterparty").value =
         entry.counterparty;
-    }
 
 
-    if ($("editQuantity")) {
+    if ($("editQuantity"))
       $("editQuantity").value =
         entry.quantity;
-    }
 
 
-    if ($("editUnitPrice")) {
+    if ($("editUnitPrice"))
       $("editUnitPrice").value =
         entry.unitPrice;
-    }
 
 
-    if ($("editDate")) {
+    if ($("editDate"))
       $("editDate").value =
         entry.date;
-    }
 
 
-    if ($("editNote")) {
+    if ($("editNote"))
       $("editNote").value =
         entry.note;
-    }
 
 
-    if (
-      $("editAdjustmentDirection")
-    ) {
-
-      $("editAdjustmentDirection")
-        .value =
+    if ($("editAdjustmentDirection"))
+      $("editAdjustmentDirection").value =
         entry.adjustmentDirection;
 
-    }
 
-
-    if ($("editMode")) {
-
+    if ($("editMode"))
       $("editMode").value =
         entry.type;
-
-    }
 
 
     panel.classList.remove(
@@ -1506,7 +1435,7 @@
 
 
   /* =========================================================
-     UPDATE ENTRY
+     UPDATE ENTRY IN SUPABASE
   ========================================================= */
 
   async function updateEntry(event) {
@@ -1588,6 +1517,8 @@
     }
 
 
+    /* ONLY REAL DATABASE COLUMNS */
+
     const updates = {
 
       product,
@@ -1600,8 +1531,6 @@
 
       unit_price:
         unitPrice,
-
-      unitPrice,
 
       date,
 
@@ -1619,105 +1548,66 @@
       getSupabaseClient();
 
 
-    if (client) {
+    if (!client) {
 
-      try {
+      alert(
+        "Supabase connection available nahi hai."
+      );
 
-        const {
-          error
-        } = await client
-          .from("ledger_entries")
-          .update(updates)
-          .eq("id", id);
+      return;
 
-
-        if (!error) {
-
-          alert(
-            "Record successfully update ho gaya."
-          );
+    }
 
 
-          closeEditForm();
+    try {
 
-          await loadEntries();
+      const {
+        error
+      } = await client
+        .from("ledger_entries")
+        .update(updates)
+        .eq("id", id);
 
-          return;
 
-        }
-
+      if (error) {
 
         console.error(
           "Update error:",
           error
         );
 
-      } catch (error) {
-
-        console.error(
-          "Supabase update failed:",
-          error
+        alert(
+          "Update error:\n\n" +
+          error.message
         );
+
+        return;
 
       }
 
+
+      alert(
+        "Record Supabase mein successfully update ho gaya."
+      );
+
+
+      closeEditForm();
+
+      await loadEntries();
+
+    } catch (error) {
+
+      console.error(
+        "Update failed:",
+        error
+      );
+
+      alert(
+        "Update error:\n\n" +
+        error.message
+      );
+
     }
-
-
-    /* -------------------------------------------------------
-       LOCAL UPDATE
-    ------------------------------------------------------- */
-
-    const nextEntries =
-      readLocalEntries()
-        .map(normalizeEntry)
-        .map(
-          (entry) => {
-
-            if (
-              String(entry.id) ===
-              String(id)
-            ) {
-
-              return normalizeEntry({
-
-                ...entry,
-
-                ...updates,
-
-                id,
-
-                adjustmentDirection:
-                  updates.adjustment_direction
-
-              });
-
-            }
-
-
-            return entry;
-
-          }
-        );
-
-
-    saveLocalEntries(
-      nextEntries
-    );
-
-
-    entries =
-      nextEntries;
-
-
-    render();
-
-    closeEditForm();
-
-
-    alert(
-      "Record updated locally."
-    );
 
   }
 
@@ -1732,9 +1622,7 @@
       $("editFormPanel");
 
 
-    if (!panel) {
-      return;
-    }
+    if (!panel) return;
 
 
     panel.classList.add(
@@ -1749,7 +1637,7 @@
 
 
   /* =========================================================
-     TABLE ACTIONS
+     TABLE BUTTON ACTIONS
   ========================================================= */
 
   function setupTableActions() {
@@ -1788,10 +1676,9 @@
 
         if (editButton) {
 
-          const id =
-            editButton.dataset.id;
-
-          openEditForm(id);
+          openEditForm(
+            editButton.dataset.id
+          );
 
           return;
 
@@ -1806,10 +1693,9 @@
 
         if (deleteButton) {
 
-          const id =
-            deleteButton.dataset.id;
-
-          deleteEntry(id);
+          deleteEntry(
+            deleteButton.dataset.id
+          );
 
         }
 
@@ -1820,7 +1706,7 @@
 
 
   /* =========================================================
-     INITIALIZE APP
+     INITIALIZE
   ========================================================= */
 
   async function initializeApp() {
@@ -1839,11 +1725,10 @@
 
     if ($("type")) {
 
-      $("type")
-        .addEventListener(
-          "change",
-          updateFormFields
-        );
+      $("type").addEventListener(
+        "change",
+        updateFormFields
+      );
 
       updateFormFields();
 
@@ -1854,11 +1739,10 @@
 
     if ($("ledgerForm")) {
 
-      $("ledgerForm")
-        .addEventListener(
-          "submit",
-          saveTransaction
-        );
+      $("ledgerForm").addEventListener(
+        "submit",
+        saveTransaction
+      );
 
     }
 
@@ -1867,11 +1751,10 @@
 
     if ($("editForm")) {
 
-      $("editForm")
-        .addEventListener(
-          "submit",
-          updateEntry
-        );
+      $("editForm").addEventListener(
+        "submit",
+        updateEntry
+      );
 
     }
 
@@ -1880,11 +1763,10 @@
 
     if ($("cancelEditBtn")) {
 
-      $("cancelEditBtn")
-        .addEventListener(
-          "click",
-          closeEditForm
-        );
+      $("cancelEditBtn").addEventListener(
+        "click",
+        closeEditForm
+      );
 
     }
 
@@ -1894,15 +1776,12 @@
     setupTableActions();
 
 
-    /* LOAD DATA */
+    /* LOAD */
 
     await loadEntries();
 
 
-    /* -------------------------------------------------------
-       AUTO REFRESH
-       Every 10 seconds
-    ------------------------------------------------------- */
+    /* AUTO REFRESH */
 
     if (
       !window.__stockLedgerRefreshStarted
@@ -1946,4 +1825,5 @@
   }
 
 
-})(); // IMPORTANT: CLOSE IIFE
+})();
+```
