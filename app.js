@@ -18,11 +18,327 @@
   window.__stockLedgerAppLoaded = true;
 
 
+
   /* =======================================================
-     STORAGE
-  ======================================================= */
+     SUPABASE / ONLINE STORAGE
+     ======================================================= */
 
   const STORAGE_KEY = "stockLedgerEntries_v4";
+
+  // LEDGER-APP Supabase project URL from your Supabase dashboard.
+  const SUPABASE_URL =
+    "https://uizwbjtthrypsxtosfnc.supabase.co";
+
+  /*
+    IMPORTANT:
+    Replace the value below with the Publishable key from:
+    Supabase > Project Settings > API Keys
+
+    Do NOT use the key from the old Supabase project.
+  */
+  const SUPABASE_PUBLISHABLE_KEY =
+    "REPLACE_WITH_LEDGER_APP_PUBLISHABLE_KEY";
+
+  let supabaseClient = null;
+  let ledgerEntries = [];
+  let realtimeChannel = null;
+
+  function getEntries() {
+    return Array.isArray(ledgerEntries) ? ledgerEntries : [];
+  }
+
+  function saveEntries(entries) {
+    // Local backup only. Supabase remains the main source of truth.
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(Array.isArray(entries) ? entries : [])
+      );
+    } catch (error) {
+      console.warn("Unable to save local backup:", error);
+    }
+  }
+
+  function loadLocalBackup() {
+    try {
+      const data = localStorage.getItem(STORAGE_KEY);
+      if (!data) return [];
+
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      console.warn("Unable to load local backup:", error);
+      return [];
+    }
+  }
+
+  function normalizeEntry(row) {
+    return {
+      id: row.id,
+      product: row.product || "",
+      type: row.type || "adjustment",
+      counterparty: row.counterparty || "",
+      adjustmentDirection:
+        row.adjustment_direction ||
+        row.adjustmentDirection ||
+        null,
+      quantity: Number(row.quantity || 0),
+      unitPrice: Number(
+        row.unit_price ?? row.unitPrice ?? 0
+      ),
+      date: row.date || "",
+      note: row.note || "",
+      createdAt:
+        row.created_at ||
+        row.createdAt ||
+        ""
+    };
+  }
+
+  function toDbEntry(entry) {
+    return {
+      id: entry.id,
+      product: String(entry.product || "").trim(),
+      type: entry.type,
+      counterparty: String(entry.counterparty || ""),
+      adjustment_direction:
+        entry.type === "adjustment"
+          ? (entry.adjustmentDirection || "increase")
+          : null,
+      quantity: Number(entry.quantity || 0),
+      unit_price: Number(entry.unitPrice || 0),
+      date: entry.date,
+      note: String(entry.note || "")
+    };
+  }
+
+  async function ensureSupabase() {
+    if (supabaseClient) return supabaseClient;
+
+    if (
+      !SUPABASE_PUBLISHABLE_KEY ||
+      SUPABASE_PUBLISHABLE_KEY ===
+        "REPLACE_WITH_LEDGER_APP_PUBLISHABLE_KEY"
+    ) {
+      throw new Error(
+        "LEDGER-APP Supabase Publishable Key is missing. " +
+        "Open Supabase > Project Settings > API Keys and paste the Publishable key into app.js."
+      );
+    }
+
+    if (
+      window.supabase &&
+      typeof window.supabase.createClient === "function"
+    ) {
+      supabaseClient = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_PUBLISHABLE_KEY
+      );
+      return supabaseClient;
+    }
+
+    await new Promise((resolve, reject) => {
+      const existing =
+        document.querySelector(
+          'script[data-supabase-loader]'
+        );
+
+      if (existing) {
+        const started = Date.now();
+
+        const timer = setInterval(() => {
+          if (
+            window.supabase &&
+            typeof window.supabase.createClient === "function"
+          ) {
+            clearInterval(timer);
+            resolve();
+          } else if (Date.now() - started > 10000) {
+            clearInterval(timer);
+            reject(
+              new Error(
+                "Supabase library did not load."
+              )
+            );
+          }
+        }, 50);
+
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src =
+        "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+      script.dataset.supabaseLoader = "true";
+      script.onload = resolve;
+      script.onerror = () =>
+        reject(
+          new Error(
+            "Could not load Supabase library."
+          )
+        );
+
+      document.head.appendChild(script);
+    });
+
+    if (
+      !window.supabase ||
+      typeof window.supabase.createClient !== "function"
+    ) {
+      throw new Error(
+        "Supabase library is not available."
+      );
+    }
+
+    supabaseClient = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY
+    );
+
+    return supabaseClient;
+  }
+
+  async function refreshEntries() {
+    const client = await ensureSupabase();
+
+    const { data, error } = await client
+      .from("ledger_entries")
+      .select("*")
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(
+        "Supabase load error:",
+        error
+      );
+      throw error;
+    }
+
+    ledgerEntries = (data || []).map(normalizeEntry);
+    saveEntries(ledgerEntries);
+    renderCurrentPage();
+
+    return ledgerEntries;
+  }
+
+  function subscribeToRealtime() {
+    if (!supabaseClient) return;
+
+    if (realtimeChannel) {
+      try {
+        supabaseClient.removeChannel(
+          realtimeChannel
+        );
+      } catch (error) {
+        console.warn(
+          "Could not remove old realtime channel:",
+          error
+        );
+      }
+    }
+
+    realtimeChannel = supabaseClient
+      .channel("ledger_entries_realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "ledger_entries"
+        },
+        (payload) => {
+          console.log(
+            "Ledger realtime event:",
+            payload.eventType
+          );
+
+          if (payload.eventType === "INSERT") {
+            const incoming =
+              normalizeEntry(payload.new);
+
+            const exists = ledgerEntries.some(
+              (entry) =>
+                String(entry.id) ===
+                String(incoming.id)
+            );
+
+            if (!exists) {
+              ledgerEntries.push(incoming);
+            }
+          }
+
+          if (payload.eventType === "UPDATE") {
+            const updated =
+              normalizeEntry(payload.new);
+
+            ledgerEntries = ledgerEntries.map(
+              (entry) =>
+                String(entry.id) ===
+                String(updated.id)
+                  ? updated
+                  : entry
+            );
+          }
+
+          if (payload.eventType === "DELETE") {
+            const deletedId =
+              String(payload.old?.id || "");
+
+            ledgerEntries =
+              ledgerEntries.filter(
+                (entry) =>
+                  String(entry.id) !==
+                  deletedId
+              );
+          }
+
+          saveEntries(ledgerEntries);
+          renderCurrentPage();
+        }
+      )
+      .subscribe((status) => {
+        console.log(
+          "Ledger realtime status:",
+          status
+        );
+      });
+
+    return realtimeChannel;
+  }
+
+  async function initializeOnlineLedger() {
+    try {
+      await ensureSupabase();
+      await refreshEntries();
+      subscribeToRealtime();
+
+      console.log(
+        "Stock Ledger connected to Supabase Realtime."
+      );
+
+      return true;
+    } catch (error) {
+      console.error(
+        "Supabase initialization failed:",
+        error
+      );
+
+      // Keep the last local copy visible, but make it clear
+      // that this device is not synchronized until Supabase connects.
+      ledgerEntries = loadLocalBackup();
+      renderCurrentPage();
+
+      alert(
+        "Supabase connection failed.\n\n" +
+        error.message +
+        "\n\n" +
+        "Check the LEDGER-APP Publishable Key, Supabase RLS policies, and Realtime setting."
+      );
+
+      return false;
+    }
+  }
 
 
   /* =======================================================
@@ -209,14 +525,14 @@
   }
 
 
+
   /* =======================================================
      ADD TRANSACTION
-  ======================================================= */
+     ======================================================= */
 
-  function handleFormSubmit(event) {
+  async function handleFormSubmit(event) {
 
     event.preventDefault();
-
 
     const product =
       $("product")?.value.trim();
@@ -246,135 +562,167 @@
     const note =
       $("note")?.value.trim();
 
-
     /* -------------------------------------------------------
        VALIDATION
     ------------------------------------------------------- */
 
     if (!product) {
-
       alert(
         "Please enter product name."
       );
-
       return;
-
     }
-
 
     if (
       !Number.isFinite(quantity) ||
       quantity <= 0
     ) {
-
       alert(
         "Please enter a valid quantity."
       );
-
       return;
-
     }
-
 
     if (
       !Number.isFinite(unitPrice) ||
       unitPrice < 0
     ) {
-
       alert(
         "Please enter a valid unit price."
       );
-
       return;
-
     }
 
-
     if (!date) {
-
       alert(
         "Please select a date."
       );
-
       return;
-
     }
 
+    try {
 
-    /* -------------------------------------------------------
-       CREATE TRANSACTION
-    ------------------------------------------------------- */
+      const client =
+        await ensureSupabase();
 
-    const entries =
-      getEntries();
+      const entry = {
 
+        id:
+          (
+            window.crypto &&
+            typeof window.crypto.randomUUID ===
+              "function"
+          )
+            ? window.crypto.randomUUID()
+            : String(Date.now()),
 
-    const entry = {
+        product,
+        type,
+        counterparty,
 
-      id:
-        (
-          window.crypto &&
-          typeof window.crypto.randomUUID ===
-          "function"
-        )
-          ? window.crypto.randomUUID()
-          : String(Date.now()),
+        adjustmentDirection:
+          type === "adjustment"
+            ? adjustmentDirection
+            : null,
 
-      product,
+        quantity,
+        unitPrice,
+        date,
+        note,
 
-      type,
+        createdAt:
+          new Date().toISOString()
 
-      counterparty,
+      };
 
-      adjustmentDirection:
-        type === "adjustment"
-          ? adjustmentDirection
-          : null,
+      const { data, error } =
+        await client
+          .from("ledger_entries")
+          .insert([toDbEntry(entry)])
+          .select()
+          .single();
 
-      quantity,
+      if (error) {
+        console.error(
+          "Supabase insert error:",
+          error
+        );
 
-      unitPrice,
+        alert(
+          "Could not save transaction.\n\n" +
+          error.message
+        );
 
-      date,
+        return;
+      }
 
-      note,
+      /*
+        Do not rely only on the realtime event here.
+        Add the returned database row immediately.
+        The realtime handler will ignore it if it
+        already exists.
+      */
+      const savedEntry =
+        normalizeEntry(data || entry);
 
-      createdAt:
-        new Date().toISOString()
+      const exists =
+        ledgerEntries.some(
+          (item) =>
+            String(item.id) ===
+            String(savedEntry.id)
+        );
 
-    };
+      if (!exists) {
+        ledgerEntries.push(savedEntry);
+      }
 
+      saveEntries(ledgerEntries);
+      renderCurrentPage();
 
-    entries.push(entry);
+      /* -------------------------------------------------------
+         RESET
+      ------------------------------------------------------- */
 
+      const form =
+        $("ledgerForm");
 
-    saveEntries(entries);
+      if (form) {
+        form.reset();
+      }
 
+      if ($("quantity")) {
+        $("quantity").value = "1";
+      }
 
-    /* -------------------------------------------------------
-       RESET
-    ------------------------------------------------------- */
+      if ($("unitPrice")) {
+        $("unitPrice").value = "0";
+      }
 
-    const form =
-      $("ledgerForm");
+      setDefaultDate();
+      updateTransactionUI();
 
-    if (form) {
-      form.reset();
+      alert(
+        "Transaction saved successfully."
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Transaction save error:",
+        error
+      );
+
+      alert(
+        "Could not save transaction.\n\n" +
+        error.message
+      );
     }
-
-
-    setDefaultDate();
-
-    updateTransactionUI();
-
-    renderCurrentPage();
-
-
-    alert(
-      "Transaction saved successfully."
-    );
-
   }
+
+
+  /* =======================================================
+     STOCK CALCULATION
+     ======================================================= */
 
 
   /* =======================================================
@@ -1029,18 +1377,23 @@
   }
 
 
+
   /* =======================================================
      INITIALIZE
-  ======================================================= */
+     ======================================================= */
 
-  function init() {
+  async function init() {
 
     setDefaultDate();
 
     updateTransactionUI();
 
+    /*
+      Render the last local backup immediately while the
+      online database is loading.
+    */
+    ledgerEntries = loadLocalBackup();
     renderCurrentPage();
-
 
     const form =
       $("ledgerForm");
@@ -1054,7 +1407,6 @@
 
     }
 
-
     const type =
       $("type");
 
@@ -1067,7 +1419,13 @@
 
     }
 
+    await initializeOnlineLedger();
   }
+
+
+  /* =======================================================
+     START
+     ======================================================= */
 
 
   /* =======================================================
@@ -1081,12 +1439,24 @@
 
     document.addEventListener(
       "DOMContentLoaded",
-      init
+      () => {
+        init().catch((error) => {
+          console.error(
+            "Stock Ledger initialization error:",
+            error
+          );
+        });
+      }
     );
 
   } else {
 
-    init();
+    init().catch((error) => {
+      console.error(
+        "Stock Ledger initialization error:",
+        error
+      );
+    });
 
   }
 
