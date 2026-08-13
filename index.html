@@ -1,422 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+  <meta name="theme-color" content="#2563eb">
   <title>Stock Ledger</title>
-
   <link rel="stylesheet" href="./styles.css">
 </head>
 
 <body>
-
   <div class="app-shell">
 
-    <!-- =====================================================
-         HEADER
-    ====================================================== -->
-
     <header class="topbar">
-
       <div>
-
-        <p class="eyebrow">
-          Inventory Management
-        </p>
-
-        <h1>
-          Stock Ledger
-        </h1>
-
-        <p class="subtitle">
-          Central stock management system
-        </p>
-
+        <p class="eyebrow">Inventory Management</p>
+        <h1>Stock Ledger</h1>
+        <p class="subtitle">Central stock management system</p>
       </div>
-
     </header>
 
-
-    <!-- =====================================================
-         NAVIGATION
-    ====================================================== -->
-
-    <nav class="main-nav">
-
-      <a
-        href="./index.html"
-        class="active"
-      >
-        Dashboard
-      </a>
-
-      <a href="./received.html">
-        Received
-      </a>
-
-      <a href="./issued.html">
-        Issued
-      </a>
-
-      <a href="./history.html">
-        History
-      </a>
-
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="./index.html" class="active">Dashboard</a>
+      <a href="./received.html">Received</a>
+      <a href="./issued.html">Issued</a>
+      <a href="./history.html">History</a>
     </nav>
-
-
-    <!-- =====================================================
-         MAIN
-    ====================================================== -->
 
     <main>
 
-
-      <!-- ===================================================
-           STATS
-      ==================================================== -->
-
       <section class="stats-grid">
-
         <article class="stat-card">
-
-          <span>
-            Inventory Value
-          </span>
-
-          <strong id="inventoryValue">
-            PKR 0
-          </strong>
-
+          <span>Inventory Value</span>
+          <strong id="inventoryValue">PKR 0</strong>
         </article>
 
-
         <article class="stat-card">
-
-          <span>
-            Items In Stock
-          </span>
-
-          <strong id="itemsInStock">
-            0
-          </strong>
-
+          <span>Items In Stock</span>
+          <strong id="itemsInStock">0</strong>
         </article>
 
-
         <article class="stat-card">
-
-          <span>
-            Received Value
-          </span>
-
-          <strong id="purchaseCost">
-            PKR 0
-          </strong>
-
+          <span>Received Value</span>
+          <strong id="purchaseCost">PKR 0</strong>
         </article>
 
-
         <article class="stat-card">
-
-          <span>
-            Issued Value
-          </span>
-
-          <strong id="salesRevenue">
-            PKR 0
-          </strong>
-
+          <span>Issued Value</span>
+          <strong id="salesRevenue">PKR 0</strong>
         </article>
-
       </section>
 
-
-      <!-- ===================================================
-           ADD STOCK MOVEMENT
-      ==================================================== -->
-
       <section class="panel">
-
         <div class="section-header">
-
-          <h2>
-            Add Stock Movement
-          </h2>
-
+          <h2>Add Stock Movement</h2>
         </div>
-
 
         <form id="ledgerForm">
 
-          <!-- PRODUCT / TYPE / PERSON -->
-
           <div class="field-row">
-
             <label>
-
               Product Name
-
-              <input
-                id="product"
-                name="product"
-                type="text"
-                placeholder="e.g. 60X40X40"
-                autocomplete="off"
-                required
-              >
-
+              <input id="product" name="product" type="text"
+                placeholder="e.g. 60X40X40" autocomplete="off" required>
             </label>
-
 
             <label>
-
               Transaction Type
-
-              <select
-                id="type"
-                name="type"
-              >
-
-                <option value="received">
-                  Received
-                </option>
-
-                <option value="issued">
-                  Issued
-                </option>
-
-                <option value="adjustment">
-                  Adjustment
-                </option>
-
+              <select id="type" name="type">
+                <option value="received">Received</option>
+                <option value="issued">Issued</option>
+                <option value="adjustment">Adjustment</option>
               </select>
-
             </label>
-
 
             <label id="counterpartyLabel">
-
               Vendor / Person
-
-              <input
-                id="counterparty"
-                name="counterparty"
-                type="text"
-                placeholder="Name"
-                autocomplete="off"
-              >
-
+              <input id="counterparty" name="counterparty" type="text"
+                placeholder="Name" autocomplete="off">
             </label>
 
-
-            <label
-              id="adjustmentWrap"
-              class="hidden"
-            >
-
+            <label id="adjustmentWrap" class="hidden">
               Adjustment
-
-              <select
-                id="adjustmentDirection"
-                name="adjustmentDirection"
-              >
-
-                <option value="increase">
-                  Increase Stock
-                </option>
-
-                <option value="decrease">
-                  Decrease Stock
-                </option>
-
+              <select id="adjustmentDirection" name="adjustmentDirection">
+                <option value="increase">Increase Stock</option>
+                <option value="decrease">Decrease Stock</option>
               </select>
-
             </label>
-
           </div>
-
-
-          <!-- QUANTITY / PRICE / DATE -->
 
           <div class="field-row">
-
             <label>
-
               Quantity
-
-              <input
-                id="quantity"
-                name="quantity"
-                type="number"
-                min="1"
-                step="1"
-                value="1"
-                required
-              >
-
+              <input id="quantity" name="quantity" type="number"
+                min="1" step="1" value="1" required>
             </label>
 
-
             <label>
-
               Unit Price
-
-              <input
-                id="unitPrice"
-                name="unitPrice"
-                type="number"
-                min="0"
-                step="0.01"
-                value="0"
-              >
-
+              <input id="unitPrice" name="unitPrice" type="number"
+                min="0" step="0.01" value="0">
             </label>
-
 
             <label>
-
               Date
-
-              <input
-                id="date"
-                name="date"
-                type="date"
-                required
-              >
-
+              <input id="date" name="date" type="date" required>
             </label>
-
           </div>
-
-
-          <!-- NOTES -->
 
           <label>
-
             Notes
-
-            <textarea
-              id="note"
-              name="note"
-              rows="3"
-              placeholder="Optional notes"
-            ></textarea>
-
+            <textarea id="note" name="note" rows="3"
+              placeholder="Optional notes"></textarea>
           </label>
 
-
-          <!-- SAVE -->
-
           <div class="form-actions">
-
-            <button
-              type="submit"
-              class="primary"
-            >
-              Save Transaction
-            </button>
-
+            <button type="submit" class="primary">Save Transaction</button>
           </div>
-
         </form>
-
       </section>
 
-
-      <!-- ===================================================
-           CURRENT STOCK
-      ==================================================== -->
-
       <section class="panel">
-
         <div class="section-header">
-
-          <h2>
-            Current Stock
-          </h2>
-
+          <h2>Current Stock</h2>
         </div>
-
 
         <div class="table-wrap">
-
           <table>
-
             <thead>
-
               <tr>
-
-                <th>
-                  Product
-                </th>
-
-                <th>
-                  Qty In Stock
-                </th>
-
-                <th>
-                  Avg Cost
-                </th>
-
-                <th>
-                  Stock Value
-                </th>
-
+                <th>Product</th>
+                <th>Qty In Stock</th>
+                <th>Avg Cost</th>
+                <th>Stock Value</th>
               </tr>
-
             </thead>
-
-
             <tbody id="stockTableBody">
-
               <tr>
-
-                <td colspan="4">
-                  Loading stock...
-                </td>
-
+                <td colspan="4">Loading stock...</td>
               </tr>
-
             </tbody>
-
           </table>
-
         </div>
-
       </section>
 
     </main>
-
   </div>
 
-
-  <!-- =====================================================
-       SUPABASE JS
-       IMPORTANT: LOAD BEFORE app.js
-  ====================================================== -->
-
-
-  <!-- =====================================================
-       STOCK LEDGER APP
-  ====================================================== -->
-
-</body>
-
-</html>
-  <!-- Supabase JS -->
-
-  <!-- Stock Ledger App -->
-  
-
-
-  <!-- Supabase JS -->
+  <!-- Supabase JS: must load before app.js -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <!-- Stock Ledger App -->
   <script src="./app.js"></script>
-
 </body>
 </html>
