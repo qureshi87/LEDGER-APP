@@ -118,7 +118,7 @@
     if (
       !SUPABASE_PUBLISHABLE_KEY ||
       SUPABASE_PUBLISHABLE_KEY ===
-        "sb_publishable_nHin134kT1kqB8Q42NWAVw_c2EYkJWU"
+        "REPLACE_WITH_LEDGER_APP_PUBLISHABLE_KEY"
     ) {
       throw new Error(
         "LEDGER-APP Supabase Publishable Key is missing. " +
