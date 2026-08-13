@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Notifications / Notes — Stock Ledger</title><link rel="stylesheet" href="./styles.css"></head>
+<body data-page="notifications"><div class="app-shell">
+<header class="topbar"><div><p class="eyebrow">Inventory Management</p><h1>Stock Ledger</h1><p class="subtitle">Important notifications and notes</p></div><div class="sync-badge" id="syncStatus">Connecting…</div></header>
+<nav class="main-nav"><a href="./index.html">Dashboard</a><a href="./received.html">Received</a><a href="./issued.html">Issued</a><a href="./history.html">History</a><a href="./notifications.html" class="active">🔔 Notifications / Notes</a></nav>
+<main>
+<section class="panel"><div class="section-header"><div><p class="section-kicker">Keep Important Things Visible</p><h2>Add Notification / Note</h2><p class="panel-description">Saved notes appear in the Dashboard marquee and sync across devices.</p></div></div>
+<form id="notificationForm"><div class="field-row three">
+<label>Notification / Note<input id="notificationText" maxlength="250" placeholder="e.g. Prepare shipment tomorrow" required></label>
+<label>Priority<select id="notificationPriority"><option value="important">🔴 Important</option><option value="warning">🟡 Warning</option><option value="general">🔵 General</option></select></label>
+<label>Show Until<input id="notificationDate" type="date"></label>
+</div><div class="form-actions"><button class="primary" type="submit">Add Notification</button></div></form></section>
+
+<section id="notificationEditPanel" class="panel hidden"><div class="section-header"><div><p class="section-kicker">Modify</p><h2>Edit Notification</h2></div></div>
+<form id="notificationEditForm"><input id="notificationEditId" type="hidden"><div class="field-row three">
+<label>Notification / Note<input id="notificationEditText" maxlength="250" required></label>
+<label>Priority<select id="notificationEditPriority"><option value="important">🔴 Important</option><option value="warning">🟡 Warning</option><option value="general">🔵 General</option></select></label>
+<label>Show Until<input id="notificationEditDate" type="date"></label></div>
+<div class="form-actions"><button class="primary">Save Changes</button><button id="cancelNotificationEdit" type="button" class="secondary">Cancel</button></div></form></section>
+
+<section class="panel"><div class="section-header"><div><p class="section-kicker">Live Board</p><h2>Active Notifications</h2></div><span id="notificationCount" class="status-pill neutral">0</span></div><div id="notificationsList"></div></section>
+</main></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="./app.js"></script></body></html>

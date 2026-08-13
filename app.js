@@ -17,6 +17,7 @@
   let settingsChannel = null;
   let stockSearch = "";
   let pageSearch = "";
+  let notifications = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -117,6 +118,44 @@
     renderAll();
   }
 
+  
+  async function refreshNotifications() {
+    const client = await ensureSupabase();
+    const {data,error}=await client.from("ledger_notifications").select("*").eq("is_active",true).order("created_at",{ascending:false});
+    if(error) throw error;
+    notifications=(data||[]).filter(n=>!n.show_until || n.show_until>=today());
+    renderNotifications();
+  }
+  async function saveNotification(x,id=null){
+    const client=await ensureSupabase();
+    const row={message:x.message,priority:x.priority,show_until:x.show_until||null,updated_at:new Date().toISOString()};
+    const r=id ? await client.from("ledger_notifications").update(row).eq("id",id) :
+                 await client.from("ledger_notifications").insert([{...row,is_active:true}]);
+    if(r.error) throw r.error; await refreshNotifications();
+  }
+  async function deleteNotification(id){
+    const client=await ensureSupabase(); const {error}=await client.from("ledger_notifications").delete().eq("id",id);
+    if(error) throw error; await refreshNotifications();
+  }
+  function np(p){return p==="important"?{i:"🔴",l:"IMPORTANT",c:"important"}:p==="warning"?{i:"🟡",l:"WARNING",c:"warning"}:{i:"🔵",l:"NOTE",c:"general"}}
+  function renderNotifications(){
+    const active=notifications.filter(n=>!n.show_until||n.show_until>=today());
+    const count=$("notificationCount"), list=$("notificationsList"), marquee=$("marqueeContent");
+    if(count){count.textContent=active.length+" active";count.className="status-pill "+(active.length?"warning":"neutral")}
+    if(marquee){
+      marquee.textContent=active.length?active.map(n=>{const p=np(n.priority);return `${p.i} ${p.l}: ${n.message}`}).join("   •   "):"No active notifications or notes.";
+      marquee.classList.toggle("marquee-scroll",!!active.length);
+    }
+    if(list) list.innerHTML=active.length?active.map(n=>{const p=np(n.priority);return `<div class="notification-card ${p.c}"><div class="notification-icon">${p.i}</div><div class="notification-body"><div class="notification-meta">${p.l} · ${n.show_until?"Until "+esc(n.show_until):"Always visible"}</div><strong>${esc(n.message)}</strong></div><div class="notification-actions"><button class="secondary small-btn" data-ne="${n.id}">Edit</button><button class="delete-btn" data-nd="${n.id}">Delete</button></div></div>`}).join(""):'<div class="alert-empty">No active notifications or notes.</div>';
+    list?.querySelectorAll("[data-nd]").forEach(b=>b.onclick=async()=>{if(confirm("Delete this notification?"))try{await deleteNotification(b.dataset.nd)}catch(e){alert(e.message)}});
+    list?.querySelectorAll("[data-ne]").forEach(b=>b.onclick=()=>{const n=active.find(x=>String(x.id)===String(b.dataset.ne));if(!n)return;$("notificationEditId").value=n.id;$("notificationEditText").value=n.message;$("notificationEditPriority").value=n.priority;$("notificationEditDate").value=n.show_until||"";$("notificationEditPanel").classList.remove("hidden");$("notificationEditPanel").scrollIntoView({behavior:"smooth"})});
+  }
+  function setupNotifications(){
+    $("notificationForm")?.addEventListener("submit",async e=>{e.preventDefault();try{await saveNotification({message:$("notificationText").value.trim(),priority:$("notificationPriority").value,show_until:$("notificationDate").value||null});e.target.reset();alert("Notification added.")}catch(x){alert("Could not save notification.\n\n"+x.message)}});
+    $("notificationEditForm")?.addEventListener("submit",async e=>{e.preventDefault();try{await saveNotification({message:$("notificationEditText").value.trim(),priority:$("notificationEditPriority").value,show_until:$("notificationEditDate").value||null},$("notificationEditId").value);$("notificationEditPanel").classList.add("hidden")}catch(x){alert("Could not update notification.\n\n"+x.message)}});
+    $("cancelNotificationEdit")?.addEventListener("click",()=>$("notificationEditPanel")?.classList.add("hidden"));
+  }
+
   async function refreshMinimumLevels() {
     const client = await ensureSupabase();
     const { data, error } = await client
@@ -137,6 +176,10 @@
 
     if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
     if (settingsChannel) supabaseClient.removeChannel(settingsChannel);
+    if (window.__notificationChannel) supabaseClient.removeChannel(window.__notificationChannel);
+    window.__notificationChannel=supabaseClient.channel("ledger_notifications_realtime_v1")
+      .on("postgres_changes",{event:"*",schema:"public",table:"ledger_notifications"},async()=>{try{await refreshNotifications()}catch(e){console.error(e)}}).subscribe();
+
 
     realtimeChannel = supabaseClient
       .channel("ledger_entries_realtime_v5")
@@ -642,6 +685,7 @@
     if ($("date")) $("date").value=today();
     setupSearch();
     setupReminders();
+    setupNotifications();
 
     $("ledgerForm")?.addEventListener("submit",handleSubmit);
     $("type")?.addEventListener("change",updateTransactionUI);
@@ -659,6 +703,7 @@
       await ensureSupabase();
       await refreshEntries();
       await refreshMinimumLevels();
+      await refreshNotifications();
       subscribeRealtime();
       setSync("● Online & Synced",true);
     } catch(e) {
