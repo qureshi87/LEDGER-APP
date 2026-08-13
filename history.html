@@ -1,184 +1,48 @@
 <!DOCTYPE html>
-<html lang="en">
-
-<head>
-
-  <meta charset="UTF-8">
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
-
-  <title>Stock Ledger - History</title>
-
-  <link
-    rel="stylesheet"
-    href="./styles.css"
-  >
-
-</head>
-
-
-<body>
-
-  <div class="app-shell">
-
-
-    <!-- =================================================
-         HEADER
-    ================================================== -->
-
-    <header class="topbar">
-
-      <div>
-
-        <p class="eyebrow">
-          Inventory Management
-        </p>
-
-        <h1>
-          Transaction History
-        </h1>
-
-        <p class="subtitle">
-          Complete stock movement history
-        </p>
-
-      </div>
-
-    </header>
-
-
-    <!-- =================================================
-         NAVIGATION
-    ================================================== -->
-
-    <nav class="main-nav">
-
-      <a href="./index.html">
-        Dashboard
-      </a>
-
-      <a href="./received.html">
-        Received
-      </a>
-
-      <a href="./issued.html">
-        Issued
-      </a>
-
-      <a
-        href="./history.html"
-        class="active"
-      >
-        History
-      </a>
-
-    </nav>
-
-
-    <!-- =================================================
-         MAIN
-    ================================================== -->
-
-    <main>
-
-
-      <section class="panel">
-
-
-        <div class="section-header">
-
-          <h2>
-            All Transactions
-          </h2>
-
-        </div>
-
-
-        <div class="table-wrap">
-
-
-          <table>
-
-
-            <thead>
-
-              <tr>
-
-                <th>
-                  Date
-                </th>
-
-                <th>
-                  Product
-                </th>
-
-                <th>
-                  Type
-                </th>
-
-                <th>
-                  Counterparty
-                </th>
-
-                <th>
-                  Quantity
-                </th>
-
-                <th>
-                  Unit Price
-                </th>
-
-                <th>
-                  Total
-                </th>
-
-                <th>
-                  Notes
-                </th>
-
-              </tr>
-
-            </thead>
-
-
-            <tbody id="historyTableBody">
-
-              <tr>
-
-                <td colspan="8">
-                  No transactions yet.
-                </td>
-
-              </tr>
-
-            </tbody>
-
-
-          </table>
-
-
-        </div>
-
-
-      </section>
-
-
-    </main>
-
-
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>History — Stock Ledger</title><link rel="stylesheet" href="./styles.css">
+</head><body data-page="history">
+<div class="app-shell">
+<header class="topbar"><div><p class="eyebrow">Inventory Management</p><h1>Stock Ledger</h1><p class="subtitle">Complete transaction history</p></div><div class="sync-badge" id="syncStatus">Connecting…</div></header>
+
+<nav class="main-nav">
+<a href="./index.html" class="">Dashboard</a>
+<a href="./received.html" class="">Received</a>
+<a href="./issued.html" class="">Issued</a>
+<a href="./history.html" class="active">History</a>
+</nav>
+<main>
+<section class="panel">
+  <div class="section-header stock-header">
+    <div><p class="section-kicker">Complete Record</p><h2>Transaction History</h2></div>
+    <div class="search-box"><span>⌕</span><input id="pageSearch" type="search" placeholder="Search product, person or type…"><button id="clearPageSearch" type="button" class="clear-search hidden">×</button></div>
   </div>
-
-
-  <!-- =================================================
-       APPLICATION
-  ================================================== -->
-
-  <script src="./app.js"></script>
-
-
-</body>
-
-</html>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Date</th><th>Product</th><th>Type</th><th>Person / Vendor</th><th>Quantity</th><th>Notes</th><th>Actions</th></tr></thead>
+    <tbody id="historyTableBody"><tr><td colspan="7">Loading…</td></tr></tbody>
+  </table></div>
+</section>
+<section id="editFormPanel" class="panel hidden">
+  <div class="section-header"><div><p class="section-kicker">Modify Entry</p><h2>Edit Transaction</h2></div></div>
+  <form id="editForm">
+    <input id="editEntryId" type="hidden"><input id="editMode" type="hidden">
+    <div class="field-row three">
+      <label>Product<input id="editProduct" required></label>
+      <label>Quantity<input id="editQuantity" type="number" min="1" required></label>
+      <label>Date<input id="editDate" type="date" required></label>
+    </div>
+    <div class="field-row three">
+      <label>Type<select id="editType"><option value="received">Received</option><option value="issued">Issued</option><option value="adjustment">Adjustment</option></select></label>
+      <label>Person / Vendor<input id="editCounterparty"></label>
+      <label>Adjustment Direction<select id="editAdjustmentDirection"><option value="increase">Increase</option><option value="decrease">Decrease</option></select></label>
+    </div>
+    <div class="field-row one"><label>Notes<input id="editNote"></label></div>
+    <div class="form-actions"><button type="submit" class="primary">Save Changes</button><button id="cancelEditBtn" type="button" class="secondary">Cancel</button></div>
+  </form>
+</section>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./app.js"></script>
+</body></html>

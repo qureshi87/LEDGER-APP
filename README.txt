@@ -1,131 +1,54 @@
-LEDGER-APP — CUSTOM STOCK LEVEL + PRODUCT SEARCH
-==================================================
+LEDGER-APP QUANTITY + BACKUP V2
+================================
 
-FEATURES
---------
-1. Search Current Stock instantly.
-2. Set a different Minimum Stock Level for every product.
-3. Save minimum levels in Supabase.
-4. Status:
-   - GOOD
-   - WARNING
-   - LOW
-   - NOT SET
-5. Existing ledger entries remain unchanged.
+FILES
+-----
+index.html
+received.html
+issued.html
+history.html
+app.js
+styles.css
+supabase-stock-levels.sql
 
-INSTALLATION
+IMPORTANT
+---------
+1. BACKUP BEFORE REPLACEMENT.
+2. Replace the existing files with these files.
+3. Run supabase-stock-levels.sql ONCE in Supabase SQL Editor.
+4. Push to GitHub and deploy on Vercel.
+
+WHAT CHANGED
 ------------
+- Removed all cost/value UI.
+- Unit price is no longer requested by the user.
+- Quantity is the main focus.
+- Dashboard shows Received, Issued, Current Stock and Low Stock.
+- Product search on Current Stock.
+- Minimum stock can be set individually per product.
+- Minimum stock is saved in Supabase and syncs across devices.
+- Received/Issued/History have search.
+- Edit and Delete are retained.
+- Full JSON backup can be downloaded manually.
+- CSV quantity report can be downloaded manually.
+- JSON backup can be restored to Supabase.
+- Backup does NOT include cost values.
+- Realtime remains enabled for ledger transactions and stock settings.
 
-STEP 1 — Supabase
------------------
-Open Supabase > SQL Editor.
-
-Run:
-    supabase-stock-levels.sql
-
-IMPORTANT:
-The policy role in the SQL is "authenticated".
-If your existing ledger_entries table works through "anon"
-with the publishable key, change "authenticated" to "anon"
-in the four policies before running.
-
-STEP 2 — index.html
--------------------
-Inside the Current Stock panel, replace the current section
-header:
-
-    <div class="section-header">
-      <h2>Current Stock</h2>
-    </div>
-
-with the contents of:
-
-    stock-toolbar.html
-
-Keep the existing <div class="table-wrap"> and table.
-
-The current table should be changed to these headings:
-
-    Product
-    Qty In Stock
-    Minimum Level
-    Status
-    Level
-    Avg Cost
-    Stock Value
-
-If you want the simplest version, keep only:
-    Product
-    Qty In Stock
-    Minimum Level
-    Status
-
-and adjust the colspan in app.js accordingly.
-
-STEP 3 — styles.css
--------------------
-Add:
-    styles-stock-level-search.css
-
-to the END of styles.css.
-
-STEP 4 — app.js
----------------
-Add:
-    app-stock-level-search.js
-
-to the END of your existing app.js.
-
-IMPORTANT:
-The add-on needs access to the existing Supabase client.
-
-If your current app creates the client like:
-
-    supabaseClient = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_PUBLISHABLE_KEY
-    );
-
-add this immediately after it:
-
-    window.stockLedgerSupabaseClient = supabaseClient;
-
-If your current app already exposes its client, do not add it twice.
-
-IMPORTANT ABOUT THE TABLE
--------------------------
-The JS renders a custom Current Stock table. It expects
-stockTableBody to exist.
-
-For a clean integration, use the provided HTML toolbar and
-change the table headers to match the generated columns.
-
-SEARCH
+BACKUP
 ------
-Type:
-    60X40X40
+Download Full Backup:
+  stock-ledger-backup-YYYY-MM-DD.json
 
-Only matching products remain visible.
+CSV:
+  stock-ledger-report-YYYY-MM-DD.csv
 
-MINIMUM STOCK
--------------
-Example:
+RESTORE WARNING
+---------------
+Restore replaces the current online ledger transactions.
+Always download a fresh backup before restoring.
 
-    Product: 60X40X40
-    Current: 80
-    Minimum: 50
-    Status: GOOD
-
-If Current becomes 50 or below:
-    LOW
-
-If Current is above 50 but within 150% of minimum:
-    WARNING
-
-Above that:
-    GOOD
-
-If minimum is 0:
-    NOT SET
-
-NO EXISTING LEDGER DATA IS DELETED.
+SUPABASE KEY
+------------
+app.js contains the publishable key supplied in the previous
+conversation. Never put a secret/service_role key in browser code.

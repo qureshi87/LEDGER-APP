@@ -1,1706 +1,672 @@
 "use strict";
 
 (function () {
-
-  /*
-  =========================================================
-  STOCK LEDGER
-  LOCAL VERSION
-  Supabase will be connected after local testing
-  =========================================================
-  */
-
-  if (window.__stockLedgerAppLoaded) {
-    console.warn("Stock Ledger already loaded.");
-    return;
-  }
-
+  if (window.__stockLedgerAppLoaded) return;
   window.__stockLedgerAppLoaded = true;
 
-
-
-  /* =======================================================
-     SUPABASE / ONLINE STORAGE
-     ======================================================= */
-
-  const STORAGE_KEY = "stockLedgerEntries_v4";
-
-  // LEDGER-APP Supabase project URL from your Supabase dashboard.
-  const SUPABASE_URL =
-    "https://uizwbjtthrypsxtosfnc.supabase.co";
-
-  /*
-    IMPORTANT:
-    Replace the value below with the Publishable key from:
-    Supabase > Project Settings > API Keys
-
-    Do NOT use the key from the old Supabase project.
-  */
-  const SUPABASE_PUBLISHABLE_KEY =
-    "sb_publishable_nHin134kT1kqB8Q42NWAVw_c2EYkJWU";
+  const SUPABASE_URL = "https://uizwbjtthrypsxtosfnc.supabase.co";
+  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_nHin134kT1kqB8Q42NWAVw_c2EYkJWU";
+  const STORAGE_KEY = "stockLedgerEntries_v5";
+  const SETTINGS_KEY = "stockLedgerMinimumLevels_v1";
+  const REMINDER_KEY = "stockLedgerReminders_v1";
 
   let supabaseClient = null;
   let ledgerEntries = [];
+  let minimumLevels = {};
   let realtimeChannel = null;
+  let settingsChannel = null;
+  let stockSearch = "";
+  let pageSearch = "";
 
-  function getEntries() {
-    return Array.isArray(ledgerEntries) ? ledgerEntries : [];
+  const $ = (id) => document.getElementById(id);
+
+  function esc(value) {
+    return String(value ?? "")
+      .replaceAll("&","&amp;").replaceAll("<","&lt;")
+      .replaceAll(">","&gt;").replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
   }
 
-  function saveEntries(entries) {
-    // Local backup only. Supabase remains the main source of truth.
+  function num(value) { return Number(value || 0); }
+
+  function formatNumber(value) {
+    return num(value).toLocaleString("en-PK");
+  }
+
+  function today() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+
+  function setSync(text, good=false) {
+    const el = $("syncStatus");
+    if (!el) return;
+    el.textContent = text;
+    el.className = "sync-badge " + (good ? "good" : "");
+  }
+
+  async function ensureSupabase() {
+    if (supabaseClient) return supabaseClient;
+    if (!window.supabase?.createClient) {
+      throw new Error("Supabase library is not available.");
+    }
+    supabaseClient = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY
+    );
+    return supabaseClient;
+  }
+
+  function localSave() {
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(Array.isArray(entries) ? entries : [])
-      );
-    } catch (error) {
-      console.warn("Unable to save local backup:", error);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(ledgerEntries));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(minimumLevels));
+    } catch (e) {}
+  }
+
+  function localLoad() {
+    try {
+      ledgerEntries = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      minimumLevels = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      if (!Array.isArray(ledgerEntries)) ledgerEntries = [];
+      if (!minimumLevels || typeof minimumLevels !== "object") minimumLevels = {};
+    } catch {
+      ledgerEntries = [];
+      minimumLevels = {};
     }
   }
 
-  function loadLocalBackup() {
-    try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      if (!data) return [];
-
-      const parsed = JSON.parse(data);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (error) {
-      console.warn("Unable to load local backup:", error);
-      return [];
-    }
-  }
-
-  function normalizeEntry(row) {
+  function normalize(row) {
     return {
       id: row.id,
       product: row.product || "",
       type: row.type || "adjustment",
       counterparty: row.counterparty || "",
-      adjustmentDirection:
-        row.adjustment_direction ||
-        row.adjustmentDirection ||
-        null,
-      quantity: Number(row.quantity || 0),
-      unitPrice: Number(
-        row.unit_price ?? row.unitPrice ?? 0
-      ),
+      adjustmentDirection: row.adjustment_direction || row.adjustmentDirection || "increase",
+      quantity: num(row.quantity),
       date: row.date || "",
       note: row.note || "",
-      createdAt:
-        row.created_at ||
-        row.createdAt ||
-        ""
+      createdAt: row.created_at || row.createdAt || ""
     };
   }
 
-  function toDbEntry(entry) {
+  function dbEntry(entry) {
     return {
       id: entry.id,
       product: String(entry.product || "").trim(),
       type: entry.type,
       counterparty: String(entry.counterparty || ""),
-      adjustment_direction:
-        entry.type === "adjustment"
-          ? (entry.adjustmentDirection || "increase")
-          : null,
-      quantity: Number(entry.quantity || 0),
-      unit_price: Number(entry.unitPrice || 0),
+      adjustment_direction: entry.type === "adjustment" ? (entry.adjustmentDirection || "increase") : null,
+      quantity: num(entry.quantity),
+      unit_price: 0,
       date: entry.date,
       note: String(entry.note || "")
     };
   }
 
-  async function ensureSupabase() {
-    if (supabaseClient) return supabaseClient;
-
-    if (
-      !SUPABASE_PUBLISHABLE_KEY ||
-      SUPABASE_PUBLISHABLE_KEY ===
-        "REPLACE_WITH_LEDGER_APP_PUBLISHABLE_KEY"
-    ) {
-      throw new Error(
-        "LEDGER-APP Supabase Publishable Key is missing. " +
-        "Open Supabase > Project Settings > API Keys and paste the Publishable key into app.js."
-      );
-    }
-
-    if (
-      window.supabase &&
-      typeof window.supabase.createClient === "function"
-    ) {
-      supabaseClient = window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_PUBLISHABLE_KEY
-      );
-      return supabaseClient;
-    }
-
-    await new Promise((resolve, reject) => {
-      const existing =
-        document.querySelector(
-          'script[data-supabase-loader]'
-        );
-
-      if (existing) {
-        const started = Date.now();
-
-        const timer = setInterval(() => {
-          if (
-            window.supabase &&
-            typeof window.supabase.createClient === "function"
-          ) {
-            clearInterval(timer);
-            resolve();
-          } else if (Date.now() - started > 10000) {
-            clearInterval(timer);
-            reject(
-              new Error(
-                "Supabase library did not load."
-              )
-            );
-          }
-        }, 50);
-
-        return;
-      }
-
-      const script = document.createElement("script");
-      script.src =
-        "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-      script.dataset.supabaseLoader = "true";
-      script.onload = resolve;
-      script.onerror = () =>
-        reject(
-          new Error(
-            "Could not load Supabase library."
-          )
-        );
-
-      document.head.appendChild(script);
-    });
-
-    if (
-      !window.supabase ||
-      typeof window.supabase.createClient !== "function"
-    ) {
-      throw new Error(
-        "Supabase library is not available."
-      );
-    }
-
-    supabaseClient = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_PUBLISHABLE_KEY
-    );
-
-    return supabaseClient;
-  }
-
   async function refreshEntries() {
     const client = await ensureSupabase();
-
     const { data, error } = await client
       .from("ledger_entries")
       .select("*")
-      .order("date", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error(
-        "Supabase load error:",
-        error
-      );
-      throw error;
-    }
-
-    ledgerEntries = (data || []).map(normalizeEntry);
-    saveEntries(ledgerEntries);
-    renderCurrentPage();
-
-    return ledgerEntries;
+      .order("date", { ascending:false })
+      .order("created_at", { ascending:false });
+    if (error) throw error;
+    ledgerEntries = (data || []).map(normalize);
+    localSave();
+    renderAll();
   }
 
-  function subscribeToRealtime() {
+  async function refreshMinimumLevels() {
+    const client = await ensureSupabase();
+    const { data, error } = await client
+      .from("product_stock_settings")
+      .select("product, minimum_stock");
+    if (error) {
+      console.warn("Minimum stock settings unavailable:", error.message);
+      return;
+    }
+    minimumLevels = {};
+    (data || []).forEach(row => minimumLevels[row.product] = num(row.minimum_stock));
+    localSave();
+    renderAll();
+  }
+
+  function subscribeRealtime() {
     if (!supabaseClient) return;
 
-    if (realtimeChannel) {
-      try {
-        supabaseClient.removeChannel(
-          realtimeChannel
-        );
-      } catch (error) {
-        console.warn(
-          "Could not remove old realtime channel:",
-          error
-        );
-      }
-    }
+    if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+    if (settingsChannel) supabaseClient.removeChannel(settingsChannel);
 
     realtimeChannel = supabaseClient
-      .channel("ledger_entries_realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "ledger_entries"
-        },
-        (payload) => {
-          console.log(
-            "Ledger realtime event:",
-            payload.eventType
-          );
-
-          if (payload.eventType === "INSERT") {
-            const incoming =
-              normalizeEntry(payload.new);
-
-            const exists = ledgerEntries.some(
-              (entry) =>
-                String(entry.id) ===
-                String(incoming.id)
-            );
-
-            if (!exists) {
-              ledgerEntries.push(incoming);
-            }
-          }
-
-          if (payload.eventType === "UPDATE") {
-            const updated =
-              normalizeEntry(payload.new);
-
-            ledgerEntries = ledgerEntries.map(
-              (entry) =>
-                String(entry.id) ===
-                String(updated.id)
-                  ? updated
-                  : entry
-            );
-          }
-
-          if (payload.eventType === "DELETE") {
-            const deletedId =
-              String(payload.old?.id || "");
-
-            ledgerEntries =
-              ledgerEntries.filter(
-                (entry) =>
-                  String(entry.id) !==
-                  deletedId
-              );
-          }
-
-          saveEntries(ledgerEntries);
-          renderCurrentPage();
-        }
-      )
-      .subscribe((status) => {
-        console.log(
-          "Ledger realtime status:",
-          status
-        );
-      });
-
-    return realtimeChannel;
-  }
-
-  async function initializeOnlineLedger() {
-    try {
-      await ensureSupabase();
-      await refreshEntries();
-      subscribeToRealtime();
-
-      console.log(
-        "Stock Ledger connected to Supabase Realtime."
-      );
-
-      return true;
-    } catch (error) {
-      console.error(
-        "Supabase initialization failed:",
-        error
-      );
-
-      // Keep the last local copy visible, but make it clear
-      // that this device is not synchronized until Supabase connects.
-      ledgerEntries = loadLocalBackup();
-      renderCurrentPage();
-
-      alert(
-        "Supabase connection failed.\n\n" +
-        error.message +
-        "\n\n" +
-        "Check the LEDGER-APP Publishable Key, Supabase RLS policies, and Realtime setting."
-      );
-
-      return false;
-    }
-  }
-
-
-  /* =======================================================
-     HELPERS
-  ======================================================= */
-
-  const $ = (id) => document.getElementById(id);
-
-
-  function getEntries() {
-    return Array.isArray(ledgerEntries)
-      ? ledgerEntries
-      : [];
-  }
-
-
-  function saveEntries(entries) {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify(Array.isArray(entries) ? entries : [])
-      );
-    } catch (error) {
-      console.warn("Unable to save local backup:", error);
-    }
-  }
-
-
-  function formatNumber(value) {
-
-    return Number(value || 0)
-      .toLocaleString("en-PK");
-
-  }
-
-
-  function formatCurrency(value) {
-
-    return (
-      "PKR " +
-      Number(value || 0)
-        .toLocaleString("en-PK", {
-          minimumFractionDigits: 0,
-          maximumFractionDigits: 2
+      .channel("ledger_entries_realtime_v5")
+      .on("postgres_changes",
+        { event:"*", schema:"public", table:"ledger_entries" },
+        async () => {
+          try { await refreshEntries(); } catch(e) { console.error(e); }
         })
-    );
+      .subscribe();
 
+    settingsChannel = supabaseClient
+      .channel("stock_settings_realtime_v1")
+      .on("postgres_changes",
+        { event:"*", schema:"public", table:"product_stock_settings" },
+        async () => {
+          try { await refreshMinimumLevels(); } catch(e) { console.error(e); }
+        })
+      .subscribe();
   }
 
-
-  function escapeHtml(value) {
-
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-
+  function signed(entry) {
+    if (entry.type === "received") return num(entry.quantity);
+    if (entry.type === "issued") return -num(entry.quantity);
+    return entry.adjustmentDirection === "increase" ? num(entry.quantity) : -num(entry.quantity);
   }
 
-
-  /* =======================================================
-     DATE
-  ======================================================= */
-
-  function setDefaultDate() {
-
-    const input = $("date");
-
-    if (!input || input.value) {
-      return;
-    }
-
-    const today =
-      new Date();
-
-    const year =
-      today.getFullYear();
-
-    const month =
-      String(
-        today.getMonth() + 1
-      ).padStart(2, "0");
-
-    const day =
-      String(
-        today.getDate()
-      ).padStart(2, "0");
-
-    input.value =
-      `${year}-${month}-${day}`;
-
-  }
-
-
-  /* =======================================================
-     TRANSACTION UI
-  ======================================================= */
-
-  function updateTransactionUI() {
-
-    const type = $("type")?.value;
-    const counterpartyLabel = $("counterpartyLabel");
-    const counterparty = $("counterparty");
-    const adjustmentWrap = $("adjustmentWrap");
-    const unitPriceWrap = $("unitPriceWrap");
-
-    if (!counterpartyLabel || !counterparty || !adjustmentWrap) {
-      return;
-    }
-
-    if (type === "adjustment") {
-      adjustmentWrap.classList.remove("hidden");
-      counterpartyLabel.classList.add("hidden");
-      counterparty.value = "";
-    } else {
-      adjustmentWrap.classList.add("hidden");
-      counterpartyLabel.classList.remove("hidden");
-      counterparty.placeholder =
-        type === "received"
-          ? "e.g. ABC Supplies"
-          : "e.g. Customer / Worker";
-    }
-
-    // Rate is optional. It is not used/shown for issued stock.
-    if (unitPriceWrap) {
-      unitPriceWrap.classList.toggle("hidden", type === "issued");
-    }
-
-    if (type === "issued" && $("unitPrice")) {
-      $("unitPrice").value = "0";
-    }
-  }
-
-
-  /* =======================================================
-     ADD TRANSACTION
-     ======================================================= */
-
-  async function handleFormSubmit(event) {
-
-    event.preventDefault();
-
-    const product =
-      $("product")?.value.trim();
-
-    const type =
-      $("type")?.value;
-
-    const counterparty =
-      $("counterparty")?.value.trim();
-
-    const adjustmentDirection =
-      $("adjustmentDirection")?.value;
-
-    const quantity =
-      Number(
-        $("quantity")?.value
-      );
-
-    const unitPrice =
-      type === "issued"
-        ? 0
-        : Number(
-            $("unitPrice")?.value || 0
-          );
-
-    const date =
-      $("date")?.value;
-
-    const note =
-      $("note")?.value.trim();
-
-    /* -------------------------------------------------------
-       VALIDATION
-    ------------------------------------------------------- */
-
-    if (!product) {
-      alert(
-        "Please enter product name."
-      );
-      return;
-    }
-
-    if (
-      !Number.isFinite(quantity) ||
-      quantity <= 0
-    ) {
-      alert(
-        "Please enter a valid quantity."
-      );
-      return;
-    }
-
-    if (!date) {
-      alert(
-        "Please select a date."
-      );
-      return;
-    }
-
-    try {
-
-      const client =
-        await ensureSupabase();
-
-      const entry = {
-
-        id:
-          (
-            window.crypto &&
-            typeof window.crypto.randomUUID ===
-              "function"
-          )
-            ? window.crypto.randomUUID()
-            : String(Date.now()),
-
-        product,
-        type,
-        counterparty,
-
-        adjustmentDirection:
-          type === "adjustment"
-            ? adjustmentDirection
-            : null,
-
-        quantity,
-        unitPrice,
-        date,
-        note,
-
-        createdAt:
-          new Date().toISOString()
-
-      };
-
-      const { data, error } =
-        await client
-          .from("ledger_entries")
-          .insert([toDbEntry(entry)])
-          .select()
-          .single();
-
-      if (error) {
-        console.error(
-          "Supabase insert error:",
-          error
-        );
-
-        alert(
-          "Could not save transaction.\n\n" +
-          error.message
-        );
-
-        return;
-      }
-
-      /*
-        Do not rely only on the realtime event here.
-        Add the returned database row immediately.
-        The realtime handler will ignore it if it
-        already exists.
-      */
-      const savedEntry =
-        normalizeEntry(data || entry);
-
-      const exists =
-        ledgerEntries.some(
-          (item) =>
-            String(item.id) ===
-            String(savedEntry.id)
-        );
-
-      if (!exists) {
-        ledgerEntries.push(savedEntry);
-      }
-
-      saveEntries(ledgerEntries);
-      renderCurrentPage();
-
-      /* -------------------------------------------------------
-         RESET
-      ------------------------------------------------------- */
-
-      const form =
-        $("ledgerForm");
-
-      if (form) {
-        form.reset();
-      }
-
-      if ($("quantity")) {
-        $("quantity").value = "1";
-      }
-
-      if ($("unitPrice")) {
-        $("unitPrice").value = "0";
-      }
-
-      setDefaultDate();
-      updateTransactionUI();
-
-      alert(
-        "Transaction saved successfully."
-      );
-
-    } catch (error) {
-
-      console.error(
-        "Transaction save error:",
-        error
-      );
-
-      alert(
-        "Could not save transaction.\n\n" +
-        error.message
-      );
-    }
-  }
-
-
-  /* =======================================================
-     STOCK CALCULATION
-     ======================================================= */
-
-
-  /* =======================================================
-     STOCK CALCULATION
-  ======================================================= */
-
-  function calculateStock(entries) {
-
-    const stock = {};
-
-
-    entries.forEach((entry) => {
-
-      const product =
-        String(
-          entry.product || ""
-        ).trim();
-
-
-      if (!product) {
-        return;
-      }
-
-
-      if (!stock[product]) {
-
-        stock[product] = {
-
-          quantity: 0,
-
-          receivedQuantity: 0,
-
-          receivedValue: 0,
-
-          issuedQuantity: 0,
-
-          issuedValue: 0
-
-        };
-
-      }
-
-
-      const quantity =
-        Number(entry.quantity) || 0;
-
-      const unitPrice =
-        Number(entry.unitPrice) || 0;
-
-
-      if (
-        entry.type ===
-        "received"
-      ) {
-
-        stock[product].quantity +=
-          quantity;
-
-        stock[product].receivedQuantity +=
-          quantity;
-
-        stock[product].receivedValue +=
-          quantity * unitPrice;
-
-      }
-
-
-      else if (
-        entry.type ===
-        "issued"
-      ) {
-
-        stock[product].quantity -=
-          quantity;
-
-        stock[product].issuedQuantity +=
-          quantity;
-
-        stock[product].issuedValue +=
-          quantity * unitPrice;
-
-      }
-
-
-      else if (
-        entry.type ===
-        "adjustment"
-      ) {
-
-        if (
-          entry.adjustmentDirection ===
-          "increase"
-        ) {
-
-          stock[product].quantity +=
-            quantity;
-
-        } else {
-
-          stock[product].quantity -=
-            quantity;
-
-        }
-
-      }
-
+  function calculateStock() {
+    const map = {};
+    ledgerEntries.forEach(entry => {
+      const product = String(entry.product || "").trim();
+      if (!product) return;
+      if (!map[product]) map[product] = { received:0, issued:0, quantity:0 };
+      if (entry.type === "received") map[product].received += num(entry.quantity);
+      if (entry.type === "issued") map[product].issued += num(entry.quantity);
+      map[product].quantity += signed(entry);
     });
-
-
-    return stock;
-
+    return map;
   }
 
-
-  /* =======================================================
-     DASHBOARD
-  ======================================================= */
-
-  function renderDashboard() {
-
-    const entries =
-      getEntries();
-
-    const stock =
-      calculateStock(entries);
-
-
-    let inventoryValue = 0;
-
-    let itemsInStock = 0;
-
-    let purchaseCost = 0;
-
-    let salesRevenue = 0;
-
-
-    Object.values(stock)
-      .forEach((item) => {
-
-        const quantity =
-          Math.max(
-            0,
-            item.quantity
-          );
-
-
-        const avgCost =
-          item.receivedQuantity > 0
-
-            ? item.receivedValue /
-              item.receivedQuantity
-
-            : 0;
-
-
-        inventoryValue +=
-          quantity * avgCost;
-
-        itemsInStock +=
-          quantity;
-
-        purchaseCost +=
-          item.receivedValue;
-
-        salesRevenue +=
-          item.issuedValue;
-
-      });
-
-
-    if ($("inventoryValue")) {
-
-      $("inventoryValue")
-        .textContent =
-        formatCurrency(
-          inventoryValue
-        );
-
-    }
-
-
-    if ($("itemsInStock")) {
-
-      $("itemsInStock")
-        .textContent =
-        formatNumber(
-          itemsInStock
-        );
-
-    }
-
-
-    if ($("purchaseCost")) {
-
-      $("purchaseCost")
-        .textContent =
-        formatCurrency(
-          purchaseCost
-        );
-
-    }
-
-
-    if ($("salesRevenue")) {
-
-      $("salesRevenue")
-        .textContent =
-        formatCurrency(
-          salesRevenue
-        );
-
-    }
-
-
-    renderStockTable(stock);
-
+  function statusFor(qty, min) {
+    if (!min) return { cls:"neutral", text:"Not Set", icon:"⚪" };
+    if (qty <= min) return { cls:"danger", text:"LOW", icon:"🔴" };
+    if (qty <= min * 1.5) return { cls:"warning", text:"WARNING", icon:"🟡" };
+    return { cls:"success", text:"GOOD", icon:"🟢" };
   }
 
+  function renderStats() {
+    const totalReceived = ledgerEntries.filter(e=>e.type==="received").reduce((s,e)=>s+num(e.quantity),0);
+    const totalIssued = ledgerEntries.filter(e=>e.type==="issued").reduce((s,e)=>s+num(e.quantity),0);
+    const stock = calculateStock();
+    const items = Object.values(stock).reduce((s,x)=>s+Math.max(0,x.quantity),0);
+    const low = Object.entries(stock).filter(([p,x]) => {
+      const min = num(minimumLevels[p]);
+      return min > 0 && Math.max(0,x.quantity) <= min;
+    }).length;
 
-  /* =======================================================
-     STOCK TABLE
-  ======================================================= */
-
-  function renderStockTable(stock) {
-
-    const tbody =
-      $("stockTableBody");
-
-    if (!tbody) {
-      return;
-    }
-
-
-    tbody.innerHTML = "";
-
-
-    const products =
-      Object.keys(stock)
-        .sort();
-
-
-    if (!products.length) {
-
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="4">
-            No stock available yet.
-          </td>
-        </tr>
-      `;
-
-      return;
-
-    }
-
-
-    products.forEach((product) => {
-
-      const item =
-        stock[product];
-
-
-      const quantity =
-        Math.max(
-          0,
-          item.quantity
-        );
-
-
-      const avgCost =
-        item.receivedQuantity > 0
-
-          ? item.receivedValue /
-            item.receivedQuantity
-
-          : 0;
-
-
-      const stockValue =
-        quantity * avgCost;
-
-
-      const row =
-        document.createElement("tr");
-
-
-      row.innerHTML = `
-
-        <td>
-          ${escapeHtml(product)}
-        </td>
-
-        <td>
-          ${formatNumber(quantity)}
-        </td>
-
-        <td>
-          ${formatCurrency(avgCost)}
-        </td>
-
-        <td>
-          ${formatCurrency(stockValue)}
-        </td>
-
-      `;
-
-
-      tbody.appendChild(row);
-
-    });
-
+    if ($("totalReceived")) $("totalReceived").textContent = formatNumber(totalReceived);
+    if ($("totalIssued")) $("totalIssued").textContent = formatNumber(totalIssued);
+    if ($("itemsInStock")) $("itemsInStock").textContent = formatNumber(items);
+    if ($("lowStockCount")) $("lowStockCount").textContent = formatNumber(low);
   }
 
-
-  /* =======================================================
-     RECEIVED PAGE
-  ======================================================= */
-
-  function renderReceivedPage() {
-
-    const tbody =
-      $("receivedTableBody");
-
-    if (!tbody) {
-      return;
-    }
-
-    ensureActionHeader(tbody);
-
-    const entries =
-      getEntries()
-        .filter(
-          entry =>
-            entry.type ===
-            "received"
-        )
-        .sort(
-          (a, b) =>
-            new Date(b.date) -
-            new Date(a.date)
-        );
-
-
-    tbody.innerHTML = "";
-
-
-    if (!entries.length) {
-
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="6">
-            No received stock yet.
-          </td>
-        </tr>
-      `;
-
-      return;
-
-    }
-
-
-    entries.forEach((entry) => {
-
-      const total =
-        Number(entry.quantity) *
-        Number(entry.unitPrice);
-
-
-      const row =
-        document.createElement("tr");
-
-
-      row.innerHTML = `
-
-        <td>
-          ${escapeHtml(entry.date)}
-        </td>
-
-        <td>
-          ${escapeHtml(entry.product)}
-        </td>
-
-        <td>
-          ${escapeHtml(
-            entry.counterparty ||
-            "-"
-          )}
-        </td>
-
-        <td>
-          ${formatNumber(
-            entry.quantity
-          )}
-        </td>
-
-        <td>
-          ${formatCurrency(
-            entry.unitPrice
-          )}
-        </td>
-
-        <td>
-          ${formatCurrency(total)}
-        </td>
-
-        ${actionButtons(entry)}
-
-      `;
-
-
-      tbody.appendChild(row);
-
-    });
-
-  }
-
-
-  /* =======================================================
-     ISSUED PAGE
-  ======================================================= */
-
-  function renderIssuedPage() {
-
-    const tbody = $("issuedTableBody");
+  function renderStockTable() {
+    const tbody = $("stockTableBody");
     if (!tbody) return;
 
-    const table = tbody.closest("table");
-    const theadRow = table?.querySelector("thead tr");
-    if (theadRow) {
-      theadRow.innerHTML = `
-        <th>Date</th>
-        <th>Product</th>
-        <th>Vendor / Person</th>
-        <th>Quantity</th>
-        <th>Actions</th>
-      `;
-    }
+    const stock = calculateStock();
+    const products = Object.keys(stock)
+      .filter(p => !stockSearch || p.toLowerCase().includes(stockSearch.toLowerCase()))
+      .sort();
 
-    const entries = getEntries()
-      .filter(entry => entry.type === "issued")
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    tbody.innerHTML = "";
-
-    if (!entries.length) {
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="5">No issued stock yet.</td>
-        </tr>
-      `;
+    if (!products.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-row">No matching product found.</td></tr>`;
       return;
     }
 
-    entries.forEach((entry) => {
-      const row = document.createElement("tr");
+    tbody.innerHTML = products.map(product => {
+      const item = stock[product];
+      const qty = Math.max(0,item.quantity);
+      const min = num(minimumLevels[product]);
+      const status = statusFor(qty,min);
 
-      row.innerHTML = `
-        <td>${escapeHtml(entry.date)}</td>
-        <td>${escapeHtml(entry.product)}</td>
-        <td>${escapeHtml(entry.counterparty || "-")}</td>
-        <td>${formatNumber(entry.quantity)}</td>
-        ${actionButtons(entry)}
-      `;
+      return `<tr>
+        <td><strong>${esc(product)}</strong></td>
+        <td>+${formatNumber(item.received)}</td>
+        <td>-${formatNumber(item.issued)}</td>
+        <td><strong>${formatNumber(qty)}</strong></td>
+        <td>${min ? formatNumber(min) : "—"}</td>
+        <td><span class="status-pill ${status.cls}">${status.icon} ${status.text}</span></td>
+        <td>
+          <div class="level-editor">
+            <input type="number" min="0" step="1" value="${min}" data-level-input="${esc(product)}">
+            <button type="button" class="save-level" data-save-level="${esc(product)}">Save</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join("");
 
-      tbody.appendChild(row);
+    tbody.querySelectorAll("[data-save-level]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const product = btn.dataset.saveLevel;
+        const input = tbody.querySelector(`[data-level-input="${CSS.escape(product)}"]`);
+        await saveMinimumLevel(product, input?.value);
+      });
     });
   }
 
+  async function saveMinimumLevel(product, value) {
+    const minimum = Math.max(0, Math.floor(num(value)));
+    try {
+      const client = await ensureSupabase();
+      const { error } = await client.from("product_stock_settings").upsert(
+        { product, minimum_stock: minimum, updated_at: new Date().toISOString() },
+        { onConflict:"product" }
+      );
+      if (error) throw error;
+      minimumLevels[product] = minimum;
+      localSave();
+      renderAll();
+    } catch (e) {
+      alert("Could not save minimum stock level.\n\n" + e.message);
+    }
+  }
 
-  /* =======================================================
-     HISTORY PAGE
-  ======================================================= */
+  function renderAlerts() {
+    const box = $("stockAlerts");
+    const status = $("stockAlertStatus");
+    if (!box || !status) return;
+
+    const stock = calculateStock();
+    const alerts = Object.entries(stock)
+      .map(([product,item]) => ({product, qty:Math.max(0,item.quantity), min:num(minimumLevels[product])}))
+      .filter(x => x.min > 0 && x.qty <= x.min)
+      .sort((a,b)=>a.qty-b.qty);
+
+    if (!alerts.length) {
+      status.textContent = "✓ All stock levels normal";
+      status.className = "status-pill success";
+      box.innerHTML = `<div class="alert-empty">✓ No low-stock items right now.</div>`;
+      return;
+    }
+
+    status.textContent = `${alerts.length} alert${alerts.length===1?"":"s"}`;
+    status.className = "status-pill danger";
+    box.innerHTML = alerts.map(x => `
+      <div class="stock-alert ${x.qty <= Math.max(1,Math.floor(x.min*.4)) ? "critical" : ""}">
+        <div><strong>${esc(x.product)}</strong><small>Minimum: ${formatNumber(x.min)} pieces</small></div>
+        <strong>${formatNumber(x.qty)} left</strong>
+      </div>`).join("");
+  }
+
+  function renderReceivedPage() {
+    const tbody = $("receivedTableBody");
+    if (!tbody) return;
+    const rows = ledgerEntries.filter(e=>e.type==="received")
+      .filter(e=>matchesPageSearch(e))
+      .sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+    tbody.innerHTML = rows.length ? rows.map(e => `<tr>
+      <td>${esc(e.date)}</td><td><strong>${esc(e.product)}</strong></td>
+      <td>${esc(e.counterparty || "—")}</td><td>+${formatNumber(e.quantity)}</td>
+      <td>${esc(e.note || "—")}</td>
+      <td><div class="action-group"><button class="edit-btn secondary small-btn" data-edit="${e.id}">Edit</button><button class="delete-btn" data-delete="${e.id}">Delete</button></div></td>
+    </tr>`).join("") : `<tr><td colspan="6" class="empty-row">No received stock found.</td></tr>`;
+
+    bindRowActions();
+  }
+
+  function renderIssuedPage() {
+    const tbody = $("issuedTableBody");
+    if (!tbody) return;
+    const rows = ledgerEntries.filter(e=>e.type==="issued")
+      .filter(e=>matchesPageSearch(e))
+      .sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+    tbody.innerHTML = rows.length ? rows.map(e => `<tr>
+      <td>${esc(e.date)}</td><td><strong>${esc(e.product)}</strong></td>
+      <td>${esc(e.counterparty || "—")}</td><td>-${formatNumber(e.quantity)}</td>
+      <td>${esc(e.note || "—")}</td>
+      <td><div class="action-group"><button class="edit-btn secondary small-btn" data-edit="${e.id}">Edit</button><button class="delete-btn" data-delete="${e.id}">Delete</button></div></td>
+    </tr>`).join("") : `<tr><td colspan="6" class="empty-row">No issued stock found.</td></tr>`;
+
+    bindRowActions();
+  }
 
   function renderHistoryPage() {
+    const tbody = $("historyTableBody");
+    if (!tbody) return;
+    const rows = [...ledgerEntries].filter(matchesPageSearch).sort((a,b)=>new Date(b.date)-new Date(a.date));
 
-    const tbody =
-      $("historyTableBody");
+    tbody.innerHTML = rows.length ? rows.map(e => {
+      const type = e.type==="adjustment" ? `Adjustment · ${e.adjustmentDirection}` : e.type;
+      const sign = e.type==="issued" ? "-" : "+";
+      return `<tr>
+        <td>${esc(e.date)}</td><td><strong>${esc(e.product)}</strong></td>
+        <td><span class="type-pill ${e.type}">${esc(type)}</span></td>
+        <td>${esc(e.counterparty || "—")}</td><td>${sign}${formatNumber(e.quantity)}</td>
+        <td>${esc(e.note || "—")}</td>
+        <td><div class="action-group"><button class="edit-btn secondary small-btn" data-edit="${e.id}">Edit</button><button class="delete-btn" data-delete="${e.id}">Delete</button></div></td>
+      </tr>`;
+    }).join("") : `<tr><td colspan="7" class="empty-row">No transactions found.</td></tr>`;
 
-    if (!tbody) {
-      return;
-    }
-
-    ensureActionHeader(tbody);
-
-    const entries =
-      getEntries()
-        .sort(
-          (a, b) =>
-            new Date(b.date) -
-            new Date(a.date)
-        );
-
-
-    tbody.innerHTML = "";
-
-
-    if (!entries.length) {
-
-      tbody.innerHTML = `
-        <tr>
-          <td colspan="8">
-            No transactions yet.
-          </td>
-        </tr>
-      `;
-
-      return;
-
-    }
-
-
-    entries.forEach((entry) => {
-
-      const total =
-        Number(entry.quantity) *
-        Number(entry.unitPrice);
-
-
-      let typeText =
-        entry.type;
-
-
-      if (
-        entry.type ===
-        "adjustment"
-      ) {
-
-        typeText =
-          `Adjustment - ${
-            entry.adjustmentDirection
-          }`;
-
-      }
-
-
-      const row =
-        document.createElement("tr");
-
-
-      row.innerHTML = `
-
-        <td>
-          ${escapeHtml(entry.date)}
-        </td>
-
-        <td>
-          ${escapeHtml(entry.product)}
-        </td>
-
-        <td>
-          ${escapeHtml(typeText)}
-        </td>
-
-        <td>
-          ${escapeHtml(
-            entry.counterparty ||
-            "-"
-          )}
-        </td>
-
-        <td>
-          ${formatNumber(
-            entry.quantity
-          )}
-        </td>
-
-        <td>
-          ${formatCurrency(
-            entry.unitPrice
-          )}
-        </td>
-
-        <td>
-          ${formatCurrency(total)}
-        </td>
-
-        <td>
-          ${escapeHtml(
-            entry.note ||
-            "-"
-          )}
-        </td>
-
-        ${actionButtons(entry)}
-
-      `;
-
-
-      tbody.appendChild(row);
-
-    });
-
+    bindRowActions();
   }
 
-
-  /* =======================================================
-     EDIT / DELETE / PRINT REPORT
-  ======================================================= */
-
-  function findEntryById(id) {
-    return getEntries().find(
-      entry => String(entry.id) === String(id)
-    );
+  function matchesPageSearch(e) {
+    if (!pageSearch) return true;
+    const q = pageSearch.toLowerCase();
+    return [e.product,e.counterparty,e.note,e.type,e.date].some(v => String(v||"").toLowerCase().includes(q));
   }
 
-  function ensureActionHeader(tbody) {
-    const table = tbody?.closest("table");
-    const theadRow = table?.querySelector("thead tr");
-    if (!theadRow) return;
+  function bindRowActions() {
+    document.querySelectorAll("[data-delete]").forEach(btn => btn.addEventListener("click", async () => {
+      if (!confirm("Delete this transaction permanently?")) return;
+      try {
+        const client = await ensureSupabase();
+        const { error } = await client.from("ledger_entries").delete().eq("id", btn.dataset.delete);
+        if (error) throw error;
+        await refreshEntries();
+      } catch(e) { alert("Could not delete transaction.\n\n"+e.message); }
+    }));
 
-    if (!theadRow.querySelector(".actions-header")) {
-      const th = document.createElement("th");
-      th.className = "actions-header";
-      th.textContent = "Actions";
-      theadRow.appendChild(th);
-    }
+    document.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => {
+      const entry = ledgerEntries.find(e=>String(e.id)===String(btn.dataset.edit));
+      if (entry) openEdit(entry);
+    }));
   }
 
-  function actionButtons(entry) {
-    const id = escapeHtml(entry.id);
-    return `
-      <td class="ledger-actions">
-        <button type="button" class="table-action edit" data-ledger-edit="${id}">Edit</button>
-        <button type="button" class="table-action delete" data-ledger-delete="${id}">Delete</button>
-      </td>
-    `;
-  }
-
-  function showEditModal(entry) {
-    if (!entry) return;
-
-    let modal = $("ledgerEditModal");
-    if (!modal) {
-      modal = document.createElement("div");
-      modal.id = "ledgerEditModal";
-      modal.className = "ledger-modal";
-      modal.innerHTML = `
-        <div class="ledger-modal-backdrop" data-ledger-close></div>
-        <div class="ledger-modal-card" role="dialog" aria-modal="true" aria-labelledby="ledgerEditTitle">
-          <div class="ledger-modal-head">
-            <div>
-              <p class="ledger-modal-eyebrow">Transaction Management</p>
-              <h3 id="ledgerEditTitle">Edit Transaction</h3>
-            </div>
-            <button type="button" class="ledger-modal-close" data-ledger-close aria-label="Close">×</button>
-          </div>
-          <form id="ledgerEditForm" class="ledger-edit-form">
-            <div class="ledger-edit-grid">
-              <label>Product Name<input id="editProduct" required></label>
-              <label>Transaction Type
-                <select id="editType">
-                  <option value="received">Received</option>
-                  <option value="issued">Issued</option>
-                  <option value="adjustment">Adjustment</option>
-                </select>
-              </label>
-              <label id="editCounterpartyWrap">Vendor / Person<input id="editCounterparty"></label>
-              <label id="editAdjustmentWrap" class="hidden">Adjustment
-                <select id="editAdjustmentDirection">
-                  <option value="increase">Increase Stock</option>
-                  <option value="decrease">Decrease Stock</option>
-                </select>
-              </label>
-              <label>Quantity<input id="editQuantity" type="number" min="1" step="1" required></label>
-              <label id="editUnitPriceWrap">Unit Price (Optional)<input id="editUnitPrice" type="number" min="0" step="0.01"></label>
-              <label>Date<input id="editDate" type="date" required></label>
-            </div>
-            <label>Notes<textarea id="editNote" rows="3"></textarea></label>
-            <div class="ledger-modal-actions">
-              <button type="button" class="secondary" data-ledger-close>Cancel</button>
-              <button type="submit" class="primary">Save Changes</button>
-            </div>
-          </form>
-        </div>`;
-      document.body.appendChild(modal);
-
-      modal.querySelectorAll("[data-ledger-close]").forEach(btn =>
-        btn.addEventListener("click", () => modal.remove())
-      );
-
-      $("editType").addEventListener("change", updateEditModalUI);
-      $("ledgerEditForm").addEventListener("submit", handleEditSubmit);
-    }
-
-    modal.dataset.entryId = String(entry.id);
-    $("editProduct").value = entry.product || "";
-    $("editType").value = entry.type || "received";
+  function openEdit(entry) {
+    const panel = $("editFormPanel");
+    if (!panel) return;
+    $("editEntryId").value = entry.id;
+    $("editMode").value = entry.type;
+    $("editProduct").value = entry.product;
+    $("editQuantity").value = entry.quantity;
+    $("editDate").value = entry.date;
     $("editCounterparty").value = entry.counterparty || "";
-    $("editAdjustmentDirection").value = entry.adjustmentDirection || "increase";
-    $("editQuantity").value = Number(entry.quantity || 0);
-    $("editUnitPrice").value = Number(entry.unitPrice || 0);
-    $("editDate").value = entry.date || "";
     $("editNote").value = entry.note || "";
-    updateEditModalUI();
-    modal.classList.add("open");
-    setTimeout(() => $("editProduct")?.focus(), 30);
+    if ($("editType")) $("editType").value = entry.type;
+    if ($("editAdjustmentDirection")) $("editAdjustmentDirection").value = entry.adjustmentDirection || "increase";
+    panel.classList.remove("hidden");
+    panel.scrollIntoView({behavior:"smooth",block:"start"});
   }
 
-  function updateEditModalUI() {
-    const type = $("editType")?.value;
-    const counterparty = $("editCounterpartyWrap");
-    const adjustment = $("editAdjustmentWrap");
-    const unitPriceWrap = $("editUnitPriceWrap");
-    if (!counterparty || !adjustment) return;
-
-    if (unitPriceWrap) {
-      unitPriceWrap.classList.toggle("hidden", type === "issued");
-    }
-    if (type === "issued" && $("editUnitPrice")) {
-      $("editUnitPrice").value = "0";
-    }
-
-    if (type === "adjustment") {
-      counterparty.classList.add("hidden");
-      adjustment.classList.remove("hidden");
-      $("editCounterparty").value = "";
-    } else {
-      counterparty.classList.remove("hidden");
-      adjustment.classList.add("hidden");
-    }
-  }
-
-  async function handleEditSubmit(event) {
+  async function handleEdit(event) {
     event.preventDefault();
+    const id = $("editEntryId")?.value;
+    const updated = {
+      id,
+      product: $("editProduct").value.trim(),
+      type: $("editType")?.value || $("editMode").value,
+      quantity: num($("editQuantity").value),
+      date: $("editDate").value,
+      counterparty: $("editCounterparty").value.trim(),
+      note: $("editNote").value.trim(),
+      adjustmentDirection: $("editAdjustmentDirection")?.value || "increase"
+    };
 
-    const modal = $("ledgerEditModal");
-    const id = modal?.dataset.entryId;
-    const oldEntry = findEntryById(id);
-    if (!oldEntry) return;
-
-    const product = $("editProduct").value.trim();
-    const type = $("editType").value;
-    const quantity = Number($("editQuantity").value);
-    const unitPrice =
-      type === "issued"
-        ? 0
-        : Number($("editUnitPrice").value || 0);
-    const date = $("editDate").value;
-
-    if (!product || !Number.isFinite(quantity) || quantity <= 0 ||
-        !Number.isFinite(unitPrice) || unitPrice < 0 || !date) {
-      alert("Please enter valid transaction details.");
+    if (!updated.product || updated.quantity <= 0 || !updated.date) {
+      alert("Please enter product, quantity and date.");
       return;
     }
 
-    const updated = {
-      ...oldEntry,
-      product,
-      type,
-      counterparty: type === "adjustment" ? "" : $("editCounterparty").value.trim(),
-      adjustmentDirection: type === "adjustment" ? $("editAdjustmentDirection").value : null,
-      quantity,
-      unitPrice,
-      date,
-      note: $("editNote").value.trim()
+    try {
+      const client = await ensureSupabase();
+      const { error } = await client.from("ledger_entries").update(dbEntry(updated)).eq("id", id);
+      if (error) throw error;
+      $("editFormPanel").classList.add("hidden");
+      await refreshEntries();
+    } catch(e) {
+      alert("Could not update transaction.\n\n"+e.message);
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    const product = $("product").value.trim();
+    const type = $("type").value;
+    const quantity = num($("quantity").value);
+    const date = $("date").value;
+    const counterparty = $("counterparty").value.trim();
+    const note = $("note").value.trim();
+    const adjustmentDirection = $("adjustmentDirection")?.value || "increase";
+
+    if (!product || quantity <= 0 || !date) {
+      alert("Please enter product, quantity and date.");
+      return;
+    }
+
+    const entry = {
+      id: crypto.randomUUID(),
+      product, type, quantity, date, counterparty, note,
+      adjustmentDirection: type==="adjustment" ? adjustmentDirection : null
     };
 
     try {
       const client = await ensureSupabase();
-      const { data, error } = await client
-        .from("ledger_entries")
-        .update(toDbEntry(updated))
-        .eq("id", id)
-        .select()
-        .single();
-
+      const { data, error } = await client.from("ledger_entries")
+        .insert([dbEntry(entry)]).select().single();
       if (error) throw error;
 
-      const saved = normalizeEntry(data || toDbEntry(updated));
-      ledgerEntries = getEntries().map(entry =>
-        String(entry.id) === String(id) ? saved : entry
-      );
-      saveEntries(ledgerEntries);
-      renderCurrentPage();
-      modal.remove();
-      alert("Transaction updated successfully.");
-    } catch (error) {
-      console.error("Transaction update error:", error);
-      alert("Could not update transaction.\n\n" + error.message);
+      ledgerEntries.push(normalize(data || dbEntry(entry)));
+      localSave();
+      renderAll();
+
+      $("ledgerForm").reset();
+      $("quantity").value = "1";
+      $("date").value = today();
+      updateTransactionUI();
+    } catch(e) {
+      alert("Could not save transaction.\n\n"+e.message);
     }
   }
 
-  async function deleteEntry(id) {
-    const entry = findEntryById(id);
-    if (!entry) return;
+  function updateTransactionUI() {
+    const type = $("type")?.value;
+    const label = $("counterpartyLabel");
+    const field = $("counterparty");
+    const adjust = $("adjustmentWrap");
+    if (!label || !field || !adjust) return;
 
-    const ok = confirm(
-      `Delete this transaction?\n\n${entry.date} — ${entry.product}\nQuantity: ${formatNumber(entry.quantity)}\n\nThis action cannot be undone.`
+    if (type==="adjustment") {
+      label.classList.add("hidden");
+      adjust.classList.remove("hidden");
+      field.value = "";
+    } else {
+      label.classList.remove("hidden");
+      adjust.classList.add("hidden");
+      field.placeholder = type==="received" ? "e.g. ABC Supplies" : "e.g. Customer / Worker";
+    }
+  }
+
+  function downloadBlob(name, content, type) {
+    const blob = new Blob([content], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+
+  function backupPayload() {
+    return {
+      backupVersion: 2,
+      app: "LEDGER-APP",
+      backupCreatedAt: new Date().toISOString(),
+      dataSource: "Supabase",
+      transactions: ledgerEntries.map(e => ({
+        id:e.id, product:e.product, type:e.type, quantity:e.quantity,
+        date:e.date, counterparty:e.counterparty || "",
+        note:e.note || "", adjustmentDirection:e.adjustmentDirection || null
+      })),
+      minimumStockLevels: minimumLevels
+    };
+  }
+
+  function downloadBackup() {
+    downloadBlob(
+      `stock-ledger-backup-${today()}.json`,
+      JSON.stringify(backupPayload(), null, 2),
+      "application/json"
     );
-    if (!ok) return;
-
-    try {
-      const client = await ensureSupabase();
-      const { error } = await client
-        .from("ledger_entries")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
-
-      ledgerEntries = getEntries().filter(
-        item => String(item.id) !== String(id)
-      );
-      saveEntries(ledgerEntries);
-      renderCurrentPage();
-      alert("Transaction deleted successfully.");
-    } catch (error) {
-      console.error("Transaction delete error:", error);
-      alert("Could not delete transaction.\n\n" + error.message);
-    }
   }
 
-  function reportEntries() {
-    return getEntries().slice().sort((a, b) => {
-      const dateDiff = new Date(b.date) - new Date(a.date);
-      return dateDiff || String(b.createdAt).localeCompare(String(a.createdAt));
+  function csvCell(v) {
+    return `"${String(v ?? "").replaceAll('"','""')}"`;
+  }
+
+  function downloadCsv() {
+    const stock = calculateStock();
+    const lines = [
+      ["Date","Product","Type","Person / Vendor","Quantity","Current Stock","Minimum Stock","Status","Notes"]
+        .map(csvCell).join(",")
+    ];
+
+    [...ledgerEntries].sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(e=>{
+      const current = Math.max(0, stock[e.product]?.quantity || 0);
+      const min = num(minimumLevels[e.product]);
+      const status = statusFor(current,min).text;
+      lines.push([
+        e.date,e.product,e.type,e.counterparty || "",e.quantity,
+        current,min || "",status,e.note || ""
+      ].map(csvCell).join(","));
     });
+
+    downloadBlob(`stock-ledger-report-${today()}.csv`, lines.join("\n"), "text/csv;charset=utf-8");
   }
 
-  function printLedgerReport(filterType = "all") {
-    let entries = reportEntries();
-    if (filterType !== "all") {
-      entries = entries.filter(entry => entry.type === filterType);
-    }
-
-    const receivedQty = entries.filter(e => e.type === "received")
-      .reduce((sum, e) => sum + Number(e.quantity || 0), 0);
-    const issuedQty = entries.filter(e => e.type === "issued")
-      .reduce((sum, e) => sum + Number(e.quantity || 0), 0);
-    const receivedValue = entries.filter(e => e.type === "received")
-      .reduce((sum, e) => sum + Number(e.quantity || 0) * Number(e.unitPrice || 0), 0);
-    const issuedValue = entries.filter(e => e.type === "issued")
-      .reduce((sum, e) => sum + Number(e.quantity || 0) * Number(e.unitPrice || 0), 0);
-
-    const title = filterType === "received"
-      ? "Stock Received Report"
-      : filterType === "issued"
-        ? "Stock Issued Report"
-        : "Stock Ledger Report";
-
-    const rows = entries.map(entry => {
-      const type = entry.type === "adjustment"
-        ? `Adjustment - ${entry.adjustmentDirection || "increase"}`
-        : entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
-      const total = Number(entry.quantity || 0) * Number(entry.unitPrice || 0);
-
-      if (filterType === "issued") {
-        return `<tr>
-          <td>${escapeHtml(entry.date)}</td>
-          <td>${escapeHtml(entry.product)}</td>
-          <td>${escapeHtml(type)}</td>
-          <td>${escapeHtml(entry.counterparty || "-")}</td>
-          <td class="num">${formatNumber(entry.quantity)}</td>
-          <td>${escapeHtml(entry.note || "-")}</td>
-        </tr>`;
+  async function restoreBackupFile(file) {
+    try {
+      const payload = JSON.parse(await file.text());
+      if (!payload || payload.app !== "LEDGER-APP" || !Array.isArray(payload.transactions)) {
+        throw new Error("Invalid LEDGER-APP backup file.");
       }
 
-      return `<tr>
-        <td>${escapeHtml(entry.date)}</td>
-        <td>${escapeHtml(entry.product)}</td>
-        <td>${escapeHtml(type)}</td>
-        <td>${escapeHtml(entry.counterparty || "-")}</td>
-        <td class="num">${formatNumber(entry.quantity)}</td>
-        <td class="num">${formatCurrency(entry.unitPrice)}</td>
-        <td class="num">${formatCurrency(total)}</td>
-        <td>${escapeHtml(entry.note || "-")}</td>
-      </tr>`;
-    }).join("");
+      if (!confirm(
+        "RESTORE WILL REPLACE the current online ledger transactions.\n\n" +
+        "Make sure you have a fresh backup first.\n\nContinue?"
+      )) return;
 
-    const win = window.open("", "_blank", "width=1200,height=800");
-    if (!win) {
-      alert("Please allow pop-ups to print the report.");
-      return;
+      const client = await ensureSupabase();
+
+      const rows = payload.transactions.map(e => ({
+        id:e.id || crypto.randomUUID(),
+        product:String(e.product||"").trim(),
+        type:e.type,
+        counterparty:String(e.counterparty||""),
+        adjustment_direction:e.type==="adjustment" ? (e.adjustmentDirection||"increase") : null,
+        quantity:num(e.quantity),
+        unit_price:0,
+        date:e.date,
+        note:String(e.note||"")
+      })).filter(e=>e.product && e.quantity > 0 && e.date);
+
+      const { error: deleteError } = await client.from("ledger_entries").delete().neq("id","00000000-0000-0000-0000-000000000000");
+      if (deleteError) throw deleteError;
+
+      if (rows.length) {
+        const { error } = await client.from("ledger_entries").insert(rows);
+        if (error) throw error;
+      }
+
+      const levels = payload.minimumStockLevels || {};
+      const levelRows = Object.entries(levels).map(([product,minimum_stock])=>({
+        product, minimum_stock:Math.max(0,Math.floor(num(minimum_stock))),
+        updated_at:new Date().toISOString()
+      }));
+
+      if (levelRows.length) {
+        const { error } = await client.from("product_stock_settings")
+          .upsert(levelRows,{onConflict:"product"});
+        if (error) throw error;
+      }
+
+      await refreshEntries();
+      await refreshMinimumLevels();
+      alert("Backup restored successfully.");
+    } catch(e) {
+      alert("Restore failed.\n\n"+e.message);
     }
-
-    const generated = new Date().toLocaleString("en-PK");
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-      <style>
-        *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;padding:28px;background:#fff}
-        .head{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #2563eb;padding-bottom:16px;margin-bottom:18px}
-        h1{margin:0 0 5px;font-size:28px}.muted{color:#64748b;font-size:12px}
-        .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
-        .card{border:1px solid #e2e8f0;border-radius:10px;padding:12px}.card span{display:block;color:#64748b;font-size:11px}.card strong{font-size:18px}
-        table{width:100%;border-collapse:collapse;margin-top:15px}th,td{border:1px solid #dbe2ea;padding:8px;font-size:11px;text-align:left}th{background:#f1f5f9;text-transform:uppercase;font-size:10px}.num{text-align:right;white-space:nowrap}
-        .footer{margin-top:22px;color:#64748b;font-size:10px} @media print{body{padding:10px}.summary{grid-template-columns:repeat(4,1fr)}}
-      </style></head><body>
-      <div class="head"><div><h1>${escapeHtml(title)}</h1><div class="muted">Stock Ledger • Central Inventory Management</div></div><div class="muted">Generated: ${escapeHtml(generated)}</div></div>
-      <div class="summary">
-        <div class="card"><span>Transactions</span><strong>${formatNumber(entries.length)}</strong></div>
-        <div class="card"><span>Received Quantity</span><strong>${formatNumber(receivedQty)}</strong></div>
-        <div class="card"><span>Issued Quantity</span><strong>${formatNumber(issuedQty)}</strong></div>
-        <div class="card"><span>Transaction Value</span><strong>${formatCurrency(receivedValue + issuedValue)}</strong></div>
-      </div>
-      <table><thead><tr>${filterType === "issued"
-        ? "<th>Date</th><th>Product</th><th>Type</th><th>Vendor / Person</th><th>Quantity</th><th>Notes</th>"
-        : "<th>Date</th><th>Product</th><th>Type</th><th>Vendor / Person</th><th>Quantity</th><th>Unit Price</th><th>Total</th><th>Notes</th>"
-      }</tr></thead><tbody>${rows || (filterType === "issued"
-        ? '<tr><td colspan="6">No transactions found.</td></tr>'
-        : '<tr><td colspan="8">No transactions found.</td></tr>')}</tbody></table>
-      <div class="footer">This report was generated from the current Stock Ledger data.</div>
-      <script>window.onload=function(){window.print();}</script></body></html>`);
-    win.document.close();
   }
 
-  function injectReportControls() {
-    const page = location.pathname.toLowerCase();
-
-    // Keep the Dashboard clean: print reports are available on
-    // Received, Issued and History pages only.
-    if (page.endsWith("/index.html") || page.endsWith("/") || page === "") {
-      return;
-    }
-
-    const type = page.includes("received") ? "received" : page.includes("issued") ? "issued" : "all";
-    const header = document.querySelector(".section-header");
-    if (!header || header.querySelector(".report-toolbar")) return;
-
-    const toolbar = document.createElement("div");
-    toolbar.className = "report-toolbar";
-    toolbar.innerHTML = `<button type="button" class="report-btn">Print ${type === "received" ? "Received" : type === "issued" ? "Issued" : "Ledger"} Report</button>`;
-    toolbar.querySelector("button").addEventListener("click", () => printLedgerReport(type));
-    header.appendChild(toolbar);
-  }
-
-  function bindTableActions() {
-    document.querySelectorAll("[data-ledger-edit]").forEach(btn => {
-      if (btn.dataset.bound) return;
-      btn.dataset.bound = "1";
-      btn.addEventListener("click", () => showEditModal(findEntryById(btn.dataset.ledgerEdit)));
+  function setupSearch() {
+    const input = $("stockSearch"), clear = $("clearStockSearch");
+    if (input) input.addEventListener("input",()=>{
+      stockSearch=input.value.trim();
+      clear?.classList.toggle("hidden",!stockSearch);
+      renderStockTable();
     });
-    document.querySelectorAll("[data-ledger-delete]").forEach(btn => {
-      if (btn.dataset.bound) return;
-      btn.dataset.bound = "1";
-      btn.addEventListener("click", () => deleteEntry(btn.dataset.ledgerDelete));
+    clear?.addEventListener("click",()=>{
+      input.value=""; stockSearch=""; clear.classList.add("hidden"); renderStockTable(); input.focus();
+    });
+
+    const p = $("pageSearch"), pc = $("clearPageSearch");
+    if (p) p.addEventListener("input",()=>{
+      pageSearch=p.value.trim();
+      pc?.classList.toggle("hidden",!pageSearch);
+      renderAll();
+    });
+    pc?.addEventListener("click",()=>{
+      p.value=""; pageSearch=""; pc.classList.add("hidden"); renderAll(); p.focus();
     });
   }
 
-  /* =======================================================
-     CURRENT PAGE
-  ======================================================= */
+  function setupReminders() {
+    const add=$("addReminderBtn"), wrap=$("reminderFormWrap"), form=$("reminderForm"), cancel=$("cancelReminderBtn");
+    if (!add || !wrap || !form) return;
 
-  function renderCurrentPage() {
-
-    renderDashboard();
-
-    renderReceivedPage();
-
-    renderIssuedPage();
-
-    renderHistoryPage();
-    injectReportControls();
-    bindTableActions();
-
+    function get() {
+      try { return JSON.parse(localStorage.getItem(REMINDER_KEY)||"[]"); } catch { return []; }
+    }
+    function render() {
+      const box=$("remindersList"), data=get();
+      if (!box) return;
+      box.innerHTML = data.length ? data.map(r=>`
+        <div class="reminder-item"><span>📌</span><strong>${esc(r.text)}</strong>
+        <button class="delete-reminder" data-rid="${r.id}">×</button></div>`).join("") :
+        `<div class="alert-empty">No reminders added yet.</div>`;
+      box.querySelectorAll("[data-rid]").forEach(b=>b.onclick=()=>{
+        localStorage.setItem(REMINDER_KEY,JSON.stringify(get().filter(r=>String(r.id)!==String(b.dataset.rid))));
+        render();
+      });
+    }
+    add.onclick=()=>{wrap.classList.remove("hidden");$("reminderText").focus();};
+    cancel.onclick=()=>{form.reset();wrap.classList.add("hidden");};
+    form.onsubmit=e=>{
+      e.preventDefault();
+      const text=$("reminderText").value.trim(); if(!text)return;
+      const data=get(); data.unshift({id:Date.now(),text});
+      localStorage.setItem(REMINDER_KEY,JSON.stringify(data));
+      form.reset();wrap.classList.add("hidden");render();
+    };
+    render();
   }
 
-
-
-  /* =======================================================
-     INITIALIZE
-     ======================================================= */
+  function renderAll() {
+    renderStats(); renderStockTable(); renderAlerts();
+    renderReceivedPage(); renderIssuedPage(); renderHistoryPage();
+  }
 
   async function init() {
+    localLoad();
+    if ($("date")) $("date").value=today();
+    setupSearch();
+    setupReminders();
 
-    setDefaultDate();
+    $("ledgerForm")?.addEventListener("submit",handleSubmit);
+    $("type")?.addEventListener("change",updateTransactionUI);
+    $("editForm")?.addEventListener("submit",handleEdit);
+    $("cancelEditBtn")?.addEventListener("click",()=>$("editFormPanel")?.classList.add("hidden"));
+    $("downloadBackupBtn")?.addEventListener("click",downloadBackup);
+    $("downloadCsvBtn")?.addEventListener("click",downloadCsv);
+    $("restoreBackupBtn")?.addEventListener("click",()=>$("restoreBackupInput")?.click());
+    $("restoreBackupInput")?.addEventListener("change",e=>e.target.files[0]&&restoreBackupFile(e.target.files[0]));
 
     updateTransactionUI();
+    renderAll();
 
-    /*
-      Render the last local backup immediately while the
-      online database is loading.
-    */
-    ledgerEntries = loadLocalBackup();
-    renderCurrentPage();
-
-    const form =
-      $("ledgerForm");
-
-    if (form) {
-
-      form.addEventListener(
-        "submit",
-        handleFormSubmit
-      );
-
+    try {
+      await ensureSupabase();
+      await refreshEntries();
+      await refreshMinimumLevels();
+      subscribeRealtime();
+      setSync("● Online & Synced",true);
+    } catch(e) {
+      console.error(e);
+      setSync("Offline / Check Supabase");
     }
-
-    const type =
-      $("type");
-
-    if (type) {
-
-      type.addEventListener(
-        "change",
-        updateTransactionUI
-      );
-
-    }
-
-    await initializeOnlineLedger();
   }
 
-
-  /* =======================================================
-     START
-     ======================================================= */
-
-
-  /* =======================================================
-     START
-  ======================================================= */
-
-  if (
-    document.readyState ===
-    "loading"
-  ) {
-
-    document.addEventListener(
-      "DOMContentLoaded",
-      () => {
-        init().catch((error) => {
-          console.error(
-            "Stock Ledger initialization error:",
-            error
-          );
-        });
-      }
-    );
-
-  } else {
-
-    init().catch((error) => {
-      console.error(
-        "Stock Ledger initialization error:",
-        error
-      );
-    });
-
-  }
-
+  if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",()=>init());
+  else init();
 })();

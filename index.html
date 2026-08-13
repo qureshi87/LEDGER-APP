@@ -3,153 +3,215 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#2563eb">
   <title>Stock Ledger</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
+<body data-page="dashboard">
+<div class="app-shell">
 
-<body>
-  <div class="app-shell">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Inventory Management</p>
+      <h1>Stock Ledger</h1>
+      <p class="subtitle">Quantity-focused stock management system</p>
+    </div>
+    <div class="sync-badge" id="syncStatus">Connecting…</div>
+  </header>
 
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">Inventory Management</p>
-        <h1>Stock Ledger</h1>
-        <p class="subtitle">Central stock management system</p>
-      </div>
-    </header>
+  <nav class="main-nav">
+    <a href="./index.html" class="active">Dashboard</a>
+    <a href="./received.html">Received</a>
+    <a href="./issued.html">Issued</a>
+    <a href="./history.html">History</a>
+  </nav>
 
-    <nav class="main-nav" aria-label="Main navigation">
-      <a href="./index.html" class="active">Dashboard</a>
-      <a href="./received.html">Received</a>
-      <a href="./issued.html">Issued</a>
-      <a href="./history.html">History</a>
-    </nav>
+  <main>
 
-    <main>
+    <section class="stats-grid">
+      <article class="stat-card">
+        <span>Total Received</span>
+        <strong id="totalReceived">0</strong>
+        <small>pieces</small>
+      </article>
+      <article class="stat-card">
+        <span>Total Issued</span>
+        <strong id="totalIssued">0</strong>
+        <small>pieces</small>
+      </article>
+      <article class="stat-card">
+        <span>Items In Stock</span>
+        <strong id="itemsInStock">0</strong>
+        <small>pieces remaining</small>
+      </article>
+      <article class="stat-card">
+        <span>Low Stock</span>
+        <strong id="lowStockCount">0</strong>
+        <small>products need attention</small>
+      </article>
+    </section>
 
-      <section class="stats-grid">
-        <article class="stat-card">
-          <span>Inventory Value</span>
-          <strong id="inventoryValue">PKR 0</strong>
-        </article>
-
-        <article class="stat-card">
-          <span>Items In Stock</span>
-          <strong id="itemsInStock">0</strong>
-        </article>
-
-        <article class="stat-card">
-          <span>Received Value</span>
-          <strong id="purchaseCost">PKR 0</strong>
-        </article>
-
-        <article class="stat-card">
-          <span>Issued Value</span>
-          <strong id="salesRevenue">PKR 0</strong>
-        </article>
-      </section>
-
-      <section class="panel">
-        <div class="section-header">
+    <section class="panel">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker">Quick Entry</p>
           <h2>Add Stock Movement</h2>
         </div>
+      </div>
 
-        <form id="ledgerForm">
+      <form id="ledgerForm">
+        <div class="field-row four">
 
-          <div class="field-row">
-            <label>
-              Product Name
-              <input id="product" name="product" type="text"
-                placeholder="e.g. 60X40X40" autocomplete="off" required>
-            </label>
+          <label>
+            Product Name
+            <input id="product" name="product" type="text"
+              placeholder="e.g. 60X40X40" autocomplete="off" required>
+          </label>
 
-            <label>
-              Transaction Type
-              <select id="type" name="type">
-                <option value="received">Received</option>
-                <option value="issued">Issued</option>
-                <option value="adjustment">Adjustment</option>
-              </select>
-            </label>
+          <label>
+            Transaction Type
+            <select id="type" name="type">
+              <option value="received">Received</option>
+              <option value="issued">Issued</option>
+              <option value="adjustment">Adjustment</option>
+            </select>
+          </label>
 
-            <label id="counterpartyLabel">
-              Vendor / Person
-              <input id="counterparty" name="counterparty" type="text"
-                placeholder="Name" autocomplete="off">
-            </label>
+          <label id="counterpartyLabel">
+            Vendor / Person
+            <input id="counterparty" name="counterparty" type="text"
+              placeholder="Name" autocomplete="off">
+          </label>
 
-            <label id="adjustmentWrap" class="hidden">
-              Adjustment
-              <select id="adjustmentDirection" name="adjustmentDirection">
-                <option value="increase">Increase Stock</option>
-                <option value="decrease">Decrease Stock</option>
-              </select>
-            </label>
-          </div>
+          <label id="adjustmentWrap" class="hidden">
+            Adjustment
+            <select id="adjustmentDirection" name="adjustmentDirection">
+              <option value="increase">Increase Stock</option>
+              <option value="decrease">Decrease Stock</option>
+            </select>
+          </label>
+        </div>
 
-          <div class="field-row">
-            <label>
-              Quantity
-              <input id="quantity" name="quantity" type="number"
-                min="1" step="1" value="1" required>
-            </label>
+        <div class="field-row three">
+          <label>
+            Quantity
+            <input id="quantity" name="quantity" type="number"
+              min="1" step="1" value="1" required>
+          </label>
 
-            <label id="unitPriceWrap">
-              Unit Price (Optional)
-              <input id="unitPrice" name="unitPrice" type="number"
-                min="0" step="0.01" value="0">
-            </label>
-
-            <label>
-              Date
-              <input id="date" name="date" type="date" required>
-            </label>
-          </div>
+          <label>
+            Date
+            <input id="date" name="date" type="date" required>
+          </label>
 
           <label>
             Notes
-            <textarea id="note" name="note" rows="3"
-              placeholder="Optional notes"></textarea>
+            <input id="note" name="note" type="text"
+              placeholder="Optional notes">
           </label>
+        </div>
 
-          <div class="form-actions">
-            <button type="submit" class="primary">Save Transaction</button>
-          </div>
-        </form>
-      </section>
+        <div class="form-actions">
+          <button type="submit" class="primary">Save Transaction</button>
+        </div>
+      </form>
+    </section>
 
-      <section class="panel">
-        <div class="section-header">
+    <section class="panel">
+      <div class="section-header stock-header">
+        <div>
+          <p class="section-kicker">Inventory Control</p>
           <h2>Current Stock</h2>
         </div>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Qty In Stock</th>
-                <th>Avg Cost</th>
-                <th>Stock Value</th>
-              </tr>
-            </thead>
-            <tbody id="stockTableBody">
-              <tr>
-                <td colspan="4">Loading stock...</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="search-box">
+          <span>⌕</span>
+          <input id="stockSearch" type="search"
+            placeholder="Search product..." autocomplete="off">
+          <button id="clearStockSearch" type="button" class="clear-search hidden">×</button>
         </div>
-      </section>
+      </div>
 
-    </main>
-  </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Received</th>
+              <th>Issued</th>
+              <th>Current Stock</th>
+              <th>Minimum</th>
+              <th>Status</th>
+              <th>Set Level</th>
+            </tr>
+          </thead>
+          <tbody id="stockTableBody">
+            <tr><td colspan="7">Loading stock…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
 
-  <!-- Supabase JS: must load before app.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <section class="panel alerts-panel">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker">Attention</p>
+          <h2>Stock Alerts</h2>
+        </div>
+        <span class="status-pill neutral" id="stockAlertStatus">Checking…</span>
+      </div>
+      <div id="stockAlerts"></div>
+    </section>
 
-  <!-- Stock Ledger App -->
-  <script src="./app.js"></script>
+    <section class="panel backup-panel">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker">Safety</p>
+          <h2>Backup & Data Recovery</h2>
+          <p class="panel-description">
+            Download your online ledger whenever you want. Keep the file somewhere safe.
+          </p>
+        </div>
+      </div>
+
+      <div class="backup-actions">
+        <button id="downloadBackupBtn" type="button" class="primary">⬇ Download Full Backup</button>
+        <button id="downloadCsvBtn" type="button" class="secondary">⬇ Download CSV Report</button>
+        <button id="restoreBackupBtn" type="button" class="warning-btn">↥ Restore Backup</button>
+        <input id="restoreBackupInput" type="file" accept=".json,application/json" hidden>
+      </div>
+
+      <div class="backup-note">
+        <strong>Full Backup includes:</strong>
+        transactions, quantities, dates, people/vendors, notes and minimum stock levels.
+        No cost information is included in the backup report.
+      </div>
+    </section>
+
+    <section class="panel reminder-panel">
+      <div class="section-header">
+        <div>
+          <p class="section-kicker">Keep Visible</p>
+          <h2>Important Reminders</h2>
+        </div>
+        <button id="addReminderBtn" type="button" class="secondary">+ Add Reminder</button>
+      </div>
+
+      <div id="reminderFormWrap" class="hidden">
+        <form id="reminderForm" class="reminder-form">
+          <input id="reminderText" type="text" maxlength="200"
+            placeholder="Write an important reminder…" required>
+          <button type="submit" class="primary">Save</button>
+          <button id="cancelReminderBtn" type="button" class="secondary">Cancel</button>
+        </form>
+      </div>
+
+      <div id="remindersList"></div>
+    </section>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./app.js"></script>
 </body>
 </html>
