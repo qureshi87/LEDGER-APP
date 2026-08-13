@@ -349,44 +349,21 @@
 
 
   function getEntries() {
-
-    try {
-
-      const data =
-        localStorage.getItem(STORAGE_KEY);
-
-      if (!data) {
-        return [];
-      }
-
-      const parsed =
-        JSON.parse(data);
-
-      return Array.isArray(parsed)
-        ? parsed
-        : [];
-
-    } catch (error) {
-
-      console.error(
-        "Unable to load ledger data:",
-        error
-      );
-
-      return [];
-
-    }
-
+    return Array.isArray(ledgerEntries)
+      ? ledgerEntries
+      : [];
   }
 
 
   function saveEntries(entries) {
-
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(entries)
-    );
-
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(Array.isArray(entries) ? entries : [])
+      );
+    } catch (error) {
+      console.warn("Unable to save local backup:", error);
+    }
   }
 
 
@@ -464,66 +441,38 @@
 
   function updateTransactionUI() {
 
-    const type =
-      $("type")?.value;
+    const type = $("type")?.value;
+    const counterpartyLabel = $("counterpartyLabel");
+    const counterparty = $("counterparty");
+    const adjustmentWrap = $("adjustmentWrap");
+    const unitPriceWrap = $("unitPriceWrap");
 
-    const counterpartyLabel =
-      $("counterpartyLabel");
-
-    const counterparty =
-      $("counterparty");
-
-    const adjustmentWrap =
-      $("adjustmentWrap");
-
-    if (
-      !counterpartyLabel ||
-      !counterparty ||
-      !adjustmentWrap
-    ) {
+    if (!counterpartyLabel || !counterparty || !adjustmentWrap) {
       return;
     }
 
-
     if (type === "adjustment") {
-
-      adjustmentWrap.classList.remove(
-        "hidden"
-      );
-
-      counterpartyLabel.classList.add(
-        "hidden"
-      );
-
+      adjustmentWrap.classList.remove("hidden");
+      counterpartyLabel.classList.add("hidden");
       counterparty.value = "";
-
     } else {
-
-      adjustmentWrap.classList.add(
-        "hidden"
-      );
-
-      counterpartyLabel.classList.remove(
-        "hidden"
-      );
-
-
-      if (type === "received") {
-
-        counterparty.placeholder =
-          "e.g. ABC Supplies";
-
-      } else {
-
-        counterparty.placeholder =
-          "e.g. Customer / Worker";
-
-      }
-
+      adjustmentWrap.classList.add("hidden");
+      counterpartyLabel.classList.remove("hidden");
+      counterparty.placeholder =
+        type === "received"
+          ? "e.g. ABC Supplies"
+          : "e.g. Customer / Worker";
     }
 
-  }
+    // Rate is optional. It is not used/shown for issued stock.
+    if (unitPriceWrap) {
+      unitPriceWrap.classList.toggle("hidden", type === "issued");
+    }
 
+    if (type === "issued" && $("unitPrice")) {
+      $("unitPrice").value = "0";
+    }
+  }
 
 
   /* =======================================================
@@ -552,9 +501,11 @@
       );
 
     const unitPrice =
-      Number(
-        $("unitPrice")?.value
-      );
+      type === "issued"
+        ? 0
+        : Number(
+            $("unitPrice")?.value || 0
+          );
 
     const date =
       $("date")?.value;
@@ -579,16 +530,6 @@
     ) {
       alert(
         "Please enter a valid quantity."
-      );
-      return;
-    }
-
-    if (
-      !Number.isFinite(unitPrice) ||
-      unitPrice < 0
-    ) {
-      alert(
-        "Please enter a valid unit price."
       );
       return;
     }
@@ -1050,6 +991,7 @@
       return;
     }
 
+    ensureActionHeader(tbody);
 
     const entries =
       getEntries()
@@ -1127,6 +1069,8 @@
           ${formatCurrency(total)}
         </td>
 
+        ${actionButtons(entry)}
+
       `;
 
 
@@ -1143,97 +1087,49 @@
 
   function renderIssuedPage() {
 
-    const tbody =
-      $("issuedTableBody");
+    const tbody = $("issuedTableBody");
+    if (!tbody) return;
 
-    if (!tbody) {
-      return;
+    const table = tbody.closest("table");
+    const theadRow = table?.querySelector("thead tr");
+    if (theadRow) {
+      theadRow.innerHTML = `
+        <th>Date</th>
+        <th>Product</th>
+        <th>Vendor / Person</th>
+        <th>Quantity</th>
+        <th>Actions</th>
+      `;
     }
 
-
-    const entries =
-      getEntries()
-        .filter(
-          entry =>
-            entry.type ===
-            "issued"
-        )
-        .sort(
-          (a, b) =>
-            new Date(b.date) -
-            new Date(a.date)
-        );
-
+    const entries = getEntries()
+      .filter(entry => entry.type === "issued")
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
 
     tbody.innerHTML = "";
 
-
     if (!entries.length) {
-
       tbody.innerHTML = `
         <tr>
-          <td colspan="6">
-            No issued stock yet.
-          </td>
+          <td colspan="5">No issued stock yet.</td>
         </tr>
       `;
-
       return;
-
     }
 
-
     entries.forEach((entry) => {
-
-      const total =
-        Number(entry.quantity) *
-        Number(entry.unitPrice);
-
-
-      const row =
-        document.createElement("tr");
-
+      const row = document.createElement("tr");
 
       row.innerHTML = `
-
-        <td>
-          ${escapeHtml(entry.date)}
-        </td>
-
-        <td>
-          ${escapeHtml(entry.product)}
-        </td>
-
-        <td>
-          ${escapeHtml(
-            entry.counterparty ||
-            "-"
-          )}
-        </td>
-
-        <td>
-          ${formatNumber(
-            entry.quantity
-          )}
-        </td>
-
-        <td>
-          ${formatCurrency(
-            entry.unitPrice
-          )}
-        </td>
-
-        <td>
-          ${formatCurrency(total)}
-        </td>
-
+        <td>${escapeHtml(entry.date)}</td>
+        <td>${escapeHtml(entry.product)}</td>
+        <td>${escapeHtml(entry.counterparty || "-")}</td>
+        <td>${formatNumber(entry.quantity)}</td>
+        ${actionButtons(entry)}
       `;
 
-
       tbody.appendChild(row);
-
     });
-
   }
 
 
@@ -1250,6 +1146,7 @@
       return;
     }
 
+    ensureActionHeader(tbody);
 
     const entries =
       getEntries()
@@ -1350,6 +1247,8 @@
           )}
         </td>
 
+        ${actionButtons(entry)}
+
       `;
 
 
@@ -1359,6 +1258,348 @@
 
   }
 
+
+  /* =======================================================
+     EDIT / DELETE / PRINT REPORT
+  ======================================================= */
+
+  function findEntryById(id) {
+    return getEntries().find(
+      entry => String(entry.id) === String(id)
+    );
+  }
+
+  function ensureActionHeader(tbody) {
+    const table = tbody?.closest("table");
+    const theadRow = table?.querySelector("thead tr");
+    if (!theadRow) return;
+
+    if (!theadRow.querySelector(".actions-header")) {
+      const th = document.createElement("th");
+      th.className = "actions-header";
+      th.textContent = "Actions";
+      theadRow.appendChild(th);
+    }
+  }
+
+  function actionButtons(entry) {
+    const id = escapeHtml(entry.id);
+    return `
+      <td class="ledger-actions">
+        <button type="button" class="table-action edit" data-ledger-edit="${id}">Edit</button>
+        <button type="button" class="table-action delete" data-ledger-delete="${id}">Delete</button>
+      </td>
+    `;
+  }
+
+  function showEditModal(entry) {
+    if (!entry) return;
+
+    let modal = $("ledgerEditModal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "ledgerEditModal";
+      modal.className = "ledger-modal";
+      modal.innerHTML = `
+        <div class="ledger-modal-backdrop" data-ledger-close></div>
+        <div class="ledger-modal-card" role="dialog" aria-modal="true" aria-labelledby="ledgerEditTitle">
+          <div class="ledger-modal-head">
+            <div>
+              <p class="ledger-modal-eyebrow">Transaction Management</p>
+              <h3 id="ledgerEditTitle">Edit Transaction</h3>
+            </div>
+            <button type="button" class="ledger-modal-close" data-ledger-close aria-label="Close">×</button>
+          </div>
+          <form id="ledgerEditForm" class="ledger-edit-form">
+            <div class="ledger-edit-grid">
+              <label>Product Name<input id="editProduct" required></label>
+              <label>Transaction Type
+                <select id="editType">
+                  <option value="received">Received</option>
+                  <option value="issued">Issued</option>
+                  <option value="adjustment">Adjustment</option>
+                </select>
+              </label>
+              <label id="editCounterpartyWrap">Vendor / Person<input id="editCounterparty"></label>
+              <label id="editAdjustmentWrap" class="hidden">Adjustment
+                <select id="editAdjustmentDirection">
+                  <option value="increase">Increase Stock</option>
+                  <option value="decrease">Decrease Stock</option>
+                </select>
+              </label>
+              <label>Quantity<input id="editQuantity" type="number" min="1" step="1" required></label>
+              <label id="editUnitPriceWrap">Unit Price (Optional)<input id="editUnitPrice" type="number" min="0" step="0.01"></label>
+              <label>Date<input id="editDate" type="date" required></label>
+            </div>
+            <label>Notes<textarea id="editNote" rows="3"></textarea></label>
+            <div class="ledger-modal-actions">
+              <button type="button" class="secondary" data-ledger-close>Cancel</button>
+              <button type="submit" class="primary">Save Changes</button>
+            </div>
+          </form>
+        </div>`;
+      document.body.appendChild(modal);
+
+      modal.querySelectorAll("[data-ledger-close]").forEach(btn =>
+        btn.addEventListener("click", () => modal.remove())
+      );
+
+      $("editType").addEventListener("change", updateEditModalUI);
+      $("ledgerEditForm").addEventListener("submit", handleEditSubmit);
+    }
+
+    modal.dataset.entryId = String(entry.id);
+    $("editProduct").value = entry.product || "";
+    $("editType").value = entry.type || "received";
+    $("editCounterparty").value = entry.counterparty || "";
+    $("editAdjustmentDirection").value = entry.adjustmentDirection || "increase";
+    $("editQuantity").value = Number(entry.quantity || 0);
+    $("editUnitPrice").value = Number(entry.unitPrice || 0);
+    $("editDate").value = entry.date || "";
+    $("editNote").value = entry.note || "";
+    updateEditModalUI();
+    modal.classList.add("open");
+    setTimeout(() => $("editProduct")?.focus(), 30);
+  }
+
+  function updateEditModalUI() {
+    const type = $("editType")?.value;
+    const counterparty = $("editCounterpartyWrap");
+    const adjustment = $("editAdjustmentWrap");
+    const unitPriceWrap = $("editUnitPriceWrap");
+    if (!counterparty || !adjustment) return;
+
+    if (unitPriceWrap) {
+      unitPriceWrap.classList.toggle("hidden", type === "issued");
+    }
+    if (type === "issued" && $("editUnitPrice")) {
+      $("editUnitPrice").value = "0";
+    }
+
+    if (type === "adjustment") {
+      counterparty.classList.add("hidden");
+      adjustment.classList.remove("hidden");
+      $("editCounterparty").value = "";
+    } else {
+      counterparty.classList.remove("hidden");
+      adjustment.classList.add("hidden");
+    }
+  }
+
+  async function handleEditSubmit(event) {
+    event.preventDefault();
+
+    const modal = $("ledgerEditModal");
+    const id = modal?.dataset.entryId;
+    const oldEntry = findEntryById(id);
+    if (!oldEntry) return;
+
+    const product = $("editProduct").value.trim();
+    const type = $("editType").value;
+    const quantity = Number($("editQuantity").value);
+    const unitPrice =
+      type === "issued"
+        ? 0
+        : Number($("editUnitPrice").value || 0);
+    const date = $("editDate").value;
+
+    if (!product || !Number.isFinite(quantity) || quantity <= 0 ||
+        !Number.isFinite(unitPrice) || unitPrice < 0 || !date) {
+      alert("Please enter valid transaction details.");
+      return;
+    }
+
+    const updated = {
+      ...oldEntry,
+      product,
+      type,
+      counterparty: type === "adjustment" ? "" : $("editCounterparty").value.trim(),
+      adjustmentDirection: type === "adjustment" ? $("editAdjustmentDirection").value : null,
+      quantity,
+      unitPrice,
+      date,
+      note: $("editNote").value.trim()
+    };
+
+    try {
+      const client = await ensureSupabase();
+      const { data, error } = await client
+        .from("ledger_entries")
+        .update(toDbEntry(updated))
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const saved = normalizeEntry(data || toDbEntry(updated));
+      ledgerEntries = getEntries().map(entry =>
+        String(entry.id) === String(id) ? saved : entry
+      );
+      saveEntries(ledgerEntries);
+      renderCurrentPage();
+      modal.remove();
+      alert("Transaction updated successfully.");
+    } catch (error) {
+      console.error("Transaction update error:", error);
+      alert("Could not update transaction.\n\n" + error.message);
+    }
+  }
+
+  async function deleteEntry(id) {
+    const entry = findEntryById(id);
+    if (!entry) return;
+
+    const ok = confirm(
+      `Delete this transaction?\n\n${entry.date} — ${entry.product}\nQuantity: ${formatNumber(entry.quantity)}\n\nThis action cannot be undone.`
+    );
+    if (!ok) return;
+
+    try {
+      const client = await ensureSupabase();
+      const { error } = await client
+        .from("ledger_entries")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      ledgerEntries = getEntries().filter(
+        item => String(item.id) !== String(id)
+      );
+      saveEntries(ledgerEntries);
+      renderCurrentPage();
+      alert("Transaction deleted successfully.");
+    } catch (error) {
+      console.error("Transaction delete error:", error);
+      alert("Could not delete transaction.\n\n" + error.message);
+    }
+  }
+
+  function reportEntries() {
+    return getEntries().slice().sort((a, b) => {
+      const dateDiff = new Date(b.date) - new Date(a.date);
+      return dateDiff || String(b.createdAt).localeCompare(String(a.createdAt));
+    });
+  }
+
+  function printLedgerReport(filterType = "all") {
+    let entries = reportEntries();
+    if (filterType !== "all") {
+      entries = entries.filter(entry => entry.type === filterType);
+    }
+
+    const receivedQty = entries.filter(e => e.type === "received")
+      .reduce((sum, e) => sum + Number(e.quantity || 0), 0);
+    const issuedQty = entries.filter(e => e.type === "issued")
+      .reduce((sum, e) => sum + Number(e.quantity || 0), 0);
+    const receivedValue = entries.filter(e => e.type === "received")
+      .reduce((sum, e) => sum + Number(e.quantity || 0) * Number(e.unitPrice || 0), 0);
+    const issuedValue = entries.filter(e => e.type === "issued")
+      .reduce((sum, e) => sum + Number(e.quantity || 0) * Number(e.unitPrice || 0), 0);
+
+    const title = filterType === "received"
+      ? "Stock Received Report"
+      : filterType === "issued"
+        ? "Stock Issued Report"
+        : "Stock Ledger Report";
+
+    const rows = entries.map(entry => {
+      const type = entry.type === "adjustment"
+        ? `Adjustment - ${entry.adjustmentDirection || "increase"}`
+        : entry.type.charAt(0).toUpperCase() + entry.type.slice(1);
+      const total = Number(entry.quantity || 0) * Number(entry.unitPrice || 0);
+
+      if (filterType === "issued") {
+        return `<tr>
+          <td>${escapeHtml(entry.date)}</td>
+          <td>${escapeHtml(entry.product)}</td>
+          <td>${escapeHtml(type)}</td>
+          <td>${escapeHtml(entry.counterparty || "-")}</td>
+          <td class="num">${formatNumber(entry.quantity)}</td>
+          <td>${escapeHtml(entry.note || "-")}</td>
+        </tr>`;
+      }
+
+      return `<tr>
+        <td>${escapeHtml(entry.date)}</td>
+        <td>${escapeHtml(entry.product)}</td>
+        <td>${escapeHtml(type)}</td>
+        <td>${escapeHtml(entry.counterparty || "-")}</td>
+        <td class="num">${formatNumber(entry.quantity)}</td>
+        <td class="num">${formatCurrency(entry.unitPrice)}</td>
+        <td class="num">${formatCurrency(total)}</td>
+        <td>${escapeHtml(entry.note || "-")}</td>
+      </tr>`;
+    }).join("");
+
+    const win = window.open("", "_blank", "width=1200,height=800");
+    if (!win) {
+      alert("Please allow pop-ups to print the report.");
+      return;
+    }
+
+    const generated = new Date().toLocaleString("en-PK");
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+      <style>
+        *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;padding:28px;background:#fff}
+        .head{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #2563eb;padding-bottom:16px;margin-bottom:18px}
+        h1{margin:0 0 5px;font-size:28px}.muted{color:#64748b;font-size:12px}
+        .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+        .card{border:1px solid #e2e8f0;border-radius:10px;padding:12px}.card span{display:block;color:#64748b;font-size:11px}.card strong{font-size:18px}
+        table{width:100%;border-collapse:collapse;margin-top:15px}th,td{border:1px solid #dbe2ea;padding:8px;font-size:11px;text-align:left}th{background:#f1f5f9;text-transform:uppercase;font-size:10px}.num{text-align:right;white-space:nowrap}
+        .footer{margin-top:22px;color:#64748b;font-size:10px} @media print{body{padding:10px}.summary{grid-template-columns:repeat(4,1fr)}}
+      </style></head><body>
+      <div class="head"><div><h1>${escapeHtml(title)}</h1><div class="muted">Stock Ledger • Central Inventory Management</div></div><div class="muted">Generated: ${escapeHtml(generated)}</div></div>
+      <div class="summary">
+        <div class="card"><span>Transactions</span><strong>${formatNumber(entries.length)}</strong></div>
+        <div class="card"><span>Received Quantity</span><strong>${formatNumber(receivedQty)}</strong></div>
+        <div class="card"><span>Issued Quantity</span><strong>${formatNumber(issuedQty)}</strong></div>
+        <div class="card"><span>Transaction Value</span><strong>${formatCurrency(receivedValue + issuedValue)}</strong></div>
+      </div>
+      <table><thead><tr>${filterType === "issued"
+        ? "<th>Date</th><th>Product</th><th>Type</th><th>Vendor / Person</th><th>Quantity</th><th>Notes</th>"
+        : "<th>Date</th><th>Product</th><th>Type</th><th>Vendor / Person</th><th>Quantity</th><th>Unit Price</th><th>Total</th><th>Notes</th>"
+      }</tr></thead><tbody>${rows || (filterType === "issued"
+        ? '<tr><td colspan="6">No transactions found.</td></tr>'
+        : '<tr><td colspan="8">No transactions found.</td></tr>')}</tbody></table>
+      <div class="footer">This report was generated from the current Stock Ledger data.</div>
+      <script>window.onload=function(){window.print();}</script></body></html>`);
+    win.document.close();
+  }
+
+  function injectReportControls() {
+    const page = location.pathname.toLowerCase();
+
+    // Keep the Dashboard clean: print reports are available on
+    // Received, Issued and History pages only.
+    if (page.endsWith("/index.html") || page.endsWith("/") || page === "") {
+      return;
+    }
+
+    const type = page.includes("received") ? "received" : page.includes("issued") ? "issued" : "all";
+    const header = document.querySelector(".section-header");
+    if (!header || header.querySelector(".report-toolbar")) return;
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "report-toolbar";
+    toolbar.innerHTML = `<button type="button" class="report-btn">Print ${type === "received" ? "Received" : type === "issued" ? "Issued" : "Ledger"} Report</button>`;
+    toolbar.querySelector("button").addEventListener("click", () => printLedgerReport(type));
+    header.appendChild(toolbar);
+  }
+
+  function bindTableActions() {
+    document.querySelectorAll("[data-ledger-edit]").forEach(btn => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => showEditModal(findEntryById(btn.dataset.ledgerEdit)));
+    });
+    document.querySelectorAll("[data-ledger-delete]").forEach(btn => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => deleteEntry(btn.dataset.ledgerDelete));
+    });
+  }
 
   /* =======================================================
      CURRENT PAGE
@@ -1373,6 +1614,8 @@
     renderIssuedPage();
 
     renderHistoryPage();
+    injectReportControls();
+    bindTableActions();
 
   }
 
