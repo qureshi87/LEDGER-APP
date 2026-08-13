@@ -1,0 +1,80 @@
+
+<!-- =====================================================
+     STOCK ALERTS + IMPORTANT REMINDERS
+     Paste this block after the stats-grid section.
+====================================================== -->
+
+<section class="alert-panel" id="stockAlertsPanel">
+
+  <div class="alert-panel-header">
+    <div>
+      <p class="alert-eyebrow">Inventory Monitor</p>
+      <h2>Stock Alerts</h2>
+    </div>
+
+    <span class="alert-status" id="stockAlertStatus">
+      Checking...
+    </span>
+  </div>
+
+  <div id="stockAlerts">
+    <div class="alert-empty">
+      Checking stock levels...
+    </div>
+  </div>
+
+</section>
+
+<section class="reminder-panel">
+
+  <div class="section-header reminder-header">
+    <div>
+      <p class="alert-eyebrow">Keep Important Things Visible</p>
+      <h2>Important Reminders</h2>
+    </div>
+
+    <button
+      type="button"
+      class="reminder-add-btn"
+      id="addReminderBtn"
+    >
+      + Add Reminder
+    </button>
+  </div>
+
+  <div id="reminderFormWrap" class="reminder-form-wrap hidden">
+
+    <form id="reminderForm">
+
+      <input
+        id="reminderText"
+        type="text"
+        placeholder="Write an important reminder..."
+        maxlength="200"
+        autocomplete="off"
+        required
+      >
+
+      <button type="submit" class="primary">
+        Save
+      </button>
+
+      <button
+        type="button"
+        id="cancelReminderBtn"
+        class="secondary-btn"
+      >
+        Cancel
+      </button>
+
+    </form>
+
+  </div>
+
+  <div id="remindersList">
+    <div class="reminder-empty">
+      No reminders added yet.
+    </div>
+  </div>
+
+</section>
