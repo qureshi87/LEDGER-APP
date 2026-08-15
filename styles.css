@@ -59,3 +59,24 @@ table{width:100%;border-collapse:collapse;min-width:760px}th,td{padding:13px 12p
 .notification-card.important{border-left-color:#dc2626;background:#fffafa}.notification-card.warning{border-left-color:#d97706;background:#fffdf5}.notification-card.general{border-left-color:#2563eb;background:#fafdff}
 .notification-icon{font-size:20px}.notification-body{flex:1}.notification-meta{font-size:10px;font-weight:900;color:var(--muted);margin-bottom:3px}.notification-actions{display:flex;gap:6px}
 @media(max-width:700px){.notification-marquee{height:44px}.marquee-label{padding:0 10px;font-size:9px}.notification-card{align-items:flex-start;flex-wrap:wrap}.notification-actions{width:100%}.notification-actions button{flex:1}}
+
+/* ===== Advanced consolidated inventory ===== */
+.inventory-panel{overflow:hidden}
+.inventory-toolbar{display:flex;align-items:center;gap:10px}
+.inventory-summary-note{display:flex;align-items:center;gap:8px;margin:-5px 0 15px;padding:11px 13px;border:1px solid #dbeafe;background:#f8fbff;color:#475569;border-radius:11px;font-size:12px}
+.inventory-summary-note span{display:inline-flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:50%;background:#dbeafe;color:#2563eb;font-weight:900}
+.inventory-wrap{border-radius:15px}
+.inventory-table{min-width:1080px}
+.inventory-table th{padding:14px 12px}
+.inventory-table td{padding:15px 12px;vertical-align:middle}
+.inventory-row:hover{background:#fbfdff}
+.product-cell{display:flex;align-items:center;gap:10px;min-width:190px}
+.product-icon{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:12px;background:#ecfdf5;color:#059669;font-size:18px;font-weight:900}
+.product-cell strong{display:block;font-size:13px}
+.product-cell small,.current-stock small{display:block;color:var(--muted);font-size:10px;margin-top:2px}
+.qty-positive{color:#059669;font-weight:850}.qty-negative{color:#dc2626;font-weight:850}
+.current-stock strong{font-size:18px;letter-spacing:-.02em}
+.minimum-cell strong{display:block;font-size:13px}.edit-level{margin-top:5px;min-height:28px;padding:0 9px;background:#eff6ff;color:#2563eb;border:1px solid #dbeafe;font-size:10px}
+.stock-level{min-width:160px}.level-head{display:flex;justify-content:space-between;gap:8px;margin-bottom:5px;font-size:10px;font-weight:800;color:#64748b}.level-track{height:7px;border-radius:99px;background:#e2e8f0;overflow:hidden}.level-track span{display:block;height:100%;border-radius:99px;background:#94a3b8}.stock-level.success .level-track span{background:#16a34a}.stock-level.warning .level-track span{background:#f59e0b}.stock-level.danger .level-track span{background:#ef4444}
+.inventory-table .status-pill{font-size:9px}
+@media(max-width:700px){.inventory-summary-note{align-items:flex-start}.inventory-toolbar,.search-box{width:100%}.inventory-panel{padding:16px 12px}.inventory-table{min-width:1080px}}

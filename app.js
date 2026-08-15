@@ -71,6 +71,14 @@
       minimumLevels = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       if (!Array.isArray(ledgerEntries)) ledgerEntries = [];
       if (!minimumLevels || typeof minimumLevels !== "object") minimumLevels = {};
+      else {
+        const normalizedLevels = {};
+        Object.entries(minimumLevels).forEach(([product, level]) => {
+          const key = productKey(product);
+          if (key) normalizedLevels[key] = num(level);
+        });
+        minimumLevels = normalizedLevels;
+      }
     } catch {
       ledgerEntries = [];
       minimumLevels = {};
@@ -156,6 +164,23 @@
     $("cancelNotificationEdit")?.addEventListener("click",()=>$("notificationEditPanel")?.classList.add("hidden"));
   }
 
+  // Products are grouped case-insensitively so 60X40X40, 60x40x40 and
+  // 60 X 40 X 40 are treated as the same inventory item.
+  function productKey(value) {
+    return String(value || "")
+      .trim()
+      .replaceAll("×", "X")
+      .replace(/\s+/g, "")
+      .toUpperCase();
+  }
+
+  function canonicalProductName(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const existing = ledgerEntries.find(e => productKey(e.product) === productKey(raw) && String(e.product || "").trim());
+    return existing ? String(existing.product).trim() : raw;
+  }
+
   async function refreshMinimumLevels() {
     const client = await ensureSupabase();
     const { data, error } = await client
@@ -166,7 +191,10 @@
       return;
     }
     minimumLevels = {};
-    (data || []).forEach(row => minimumLevels[row.product] = num(row.minimum_stock));
+    (data || []).forEach(row => {
+      const key = productKey(row.product);
+      if (key) minimumLevels[key] = num(row.minimum_stock);
+    });
     localSave();
     renderAll();
   }
@@ -208,14 +236,28 @@
 
   function calculateStock() {
     const map = {};
+
     ledgerEntries.forEach(entry => {
-      const product = String(entry.product || "").trim();
-      if (!product) return;
-      if (!map[product]) map[product] = { received:0, issued:0, quantity:0 };
-      if (entry.type === "received") map[product].received += num(entry.quantity);
-      if (entry.type === "issued") map[product].issued += num(entry.quantity);
-      map[product].quantity += signed(entry);
+      const rawProduct = String(entry.product || "").trim();
+      const key = productKey(rawProduct);
+      if (!key) return;
+
+      if (!map[key]) {
+        map[key] = {
+          product: rawProduct,
+          received: 0,
+          issued: 0,
+          quantity: 0
+        };
+      }
+
+      // Keep the first saved spelling as the display name.
+      if (!map[key].product) map[key].product = rawProduct;
+      if (entry.type === "received") map[key].received += num(entry.quantity);
+      if (entry.type === "issued") map[key].issued += num(entry.quantity);
+      map[key].quantity += signed(entry);
     });
+
     return map;
   }
 
@@ -248,55 +290,85 @@
 
     const stock = calculateStock();
     const products = Object.keys(stock)
-      .filter(p => !stockSearch || p.toLowerCase().includes(stockSearch.toLowerCase()))
-      .sort();
+      .map(key => ({ key, ...stock[key] }))
+      .filter(item => !stockSearch || productKey(item.product).includes(productKey(stockSearch)))
+      .sort((a,b) => a.product.localeCompare(b.product, undefined, { numeric:true }));
 
     if (!products.length) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty-row">No matching product found.</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = products.map(product => {
-      const item = stock[product];
-      const qty = Math.max(0,item.quantity);
-      const min = num(minimumLevels[product]);
-      const status = statusFor(qty,min);
+    tbody.innerHTML = products.map(item => {
+      const product = item.product;
+      const key = productKey(product);
+      const qty = Math.max(0, item.quantity);
+      const min = num(minimumLevels[key]);
+      const status = statusFor(qty, min);
+      const ratio = min > 0 ? Math.min(100, Math.round((qty / min) * 100)) : 0;
+      const levelClass = min > 0 ? status.cls : "neutral";
+      const levelText = min > 0 ? `${formatNumber(qty)} / ${formatNumber(min)}` : "Minimum not set";
 
-      return `<tr>
-        <td><strong>${esc(product)}</strong></td>
-        <td>+${formatNumber(item.received)}</td>
-        <td>-${formatNumber(item.issued)}</td>
-        <td><strong>${formatNumber(qty)}</strong></td>
-        <td>${min ? formatNumber(min) : "—"}</td>
-        <td><span class="status-pill ${status.cls}">${status.icon} ${status.text}</span></td>
+      return `<tr class="inventory-row">
         <td>
-          <div class="level-editor">
-            <input type="number" min="0" step="1" value="${min}" data-level-input="${esc(product)}">
-            <button type="button" class="save-level" data-save-level="${esc(product)}">Save</button>
+          <div class="product-cell">
+            <div class="product-icon">▣</div>
+            <div><strong>${esc(product)}</strong><small>Inventory item · combined</small></div>
           </div>
         </td>
+        <td><span class="qty-positive">+${formatNumber(item.received)}</span></td>
+        <td><span class="qty-negative">-${formatNumber(item.issued)}</span></td>
+        <td><div class="current-stock"><strong>${formatNumber(qty)}</strong><small>pieces</small></div></td>
+        <td><div class="minimum-cell"><strong>${min ? formatNumber(min) : "—"}</strong><button type="button" class="edit-level" data-edit-level="${esc(product)}">${min ? "Edit" : "Set"}</button></div></td>
+        <td>
+          <div class="stock-level ${levelClass}">
+            <div class="level-head"><span>${min > 0 ? `${ratio}%` : "—"}</span><span>${levelText}</span></div>
+            <div class="level-track"><span style="width:${min > 0 ? ratio : 0}%"></span></div>
+          </div>
+        </td>
+        <td><span class="status-pill ${status.cls}">${status.icon} ${status.text}</span></td>
+        <td><button type="button" class="secondary small-btn" data-product-history="${esc(product)}">History</button></td>
       </tr>`;
     }).join("");
 
-    tbody.querySelectorAll("[data-save-level]").forEach(btn => {
+    tbody.querySelectorAll("[data-edit-level]").forEach(btn => {
       btn.addEventListener("click", async () => {
-        const product = btn.dataset.saveLevel;
-        const input = tbody.querySelector(`[data-level-input="${CSS.escape(product)}"]`);
-        await saveMinimumLevel(product, input?.value);
+        const product = btn.dataset.editLevel;
+        const key = productKey(product);
+        const current = num(minimumLevels[key]);
+        const value = window.prompt(`Minimum stock level for ${product}:`, String(current));
+        if (value === null) return;
+        await saveMinimumLevel(product, value);
+      });
+    });
+
+    tbody.querySelectorAll("[data-product-history]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const product = btn.dataset.productHistory;
+        const input = $("pageSearch");
+        if (input) {
+          input.value = product;
+          pageSearch = product;
+          renderAll();
+          document.querySelector('[data-page-search-anchor]')?.scrollIntoView({behavior:"smooth"});
+        } else {
+          window.location.href = `./history.html?product=${encodeURIComponent(product)}`;
+        }
       });
     });
   }
 
   async function saveMinimumLevel(product, value) {
+    const displayProduct = canonicalProductName(product);
     const minimum = Math.max(0, Math.floor(num(value)));
     try {
       const client = await ensureSupabase();
       const { error } = await client.from("product_stock_settings").upsert(
-        { product, minimum_stock: minimum, updated_at: new Date().toISOString() },
+        { product: displayProduct, minimum_stock: minimum, updated_at: new Date().toISOString() },
         { onConflict:"product" }
       );
       if (error) throw error;
-      minimumLevels[product] = minimum;
+      minimumLevels[productKey(displayProduct)] = minimum;
       localSave();
       renderAll();
     } catch (e) {
@@ -429,7 +501,7 @@
     const id = $("editEntryId")?.value;
     const updated = {
       id,
-      product: $("editProduct").value.trim(),
+      product: canonicalProductName($("editProduct").value),
       type: $("editType")?.value || $("editMode").value,
       quantity: num($("editQuantity").value),
       date: $("editDate").value,
@@ -456,7 +528,7 @@
 
   async function handleSubmit(event) {
     event.preventDefault();
-    const product = $("product").value.trim();
+    const product = canonicalProductName($("product").value);
     const type = $("type").value;
     const quantity = num($("quantity").value);
     const date = $("date").value;
@@ -556,8 +628,8 @@
     ];
 
     [...ledgerEntries].sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(e=>{
-      const current = Math.max(0, stock[e.product]?.quantity || 0);
-      const min = num(minimumLevels[e.product]);
+      const current = Math.max(0, stock[productKey(e.product)]?.quantity || 0);
+      const min = num(minimumLevels[productKey(e.product)]);
       const status = statusFor(current,min).text;
       lines.push([
         e.date,e.product,e.type,e.counterparty || "",e.quantity,
@@ -604,7 +676,7 @@
 
       const levels = payload.minimumStockLevels || {};
       const levelRows = Object.entries(levels).map(([product,minimum_stock])=>({
-        product, minimum_stock:Math.max(0,Math.floor(num(minimum_stock))),
+        product: canonicalProductName(product), minimum_stock:Math.max(0,Math.floor(num(minimum_stock))),
         updated_at:new Date().toISOString()
       }));
 
@@ -684,6 +756,14 @@
     localLoad();
     if ($("date")) $("date").value=today();
     setupSearch();
+    const urlProduct = new URLSearchParams(window.location.search).get("product");
+    if (urlProduct) {
+      pageSearch = urlProduct;
+      if ($("pageSearch")) {
+        $("pageSearch").value = urlProduct;
+        $("clearPageSearch")?.classList.remove("hidden");
+      }
+    }
     setupReminders();
     setupNotifications();
 

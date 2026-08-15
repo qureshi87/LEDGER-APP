@@ -121,23 +121,29 @@
       </form>
     </section>
 
-    <section class="panel">
+    <section class="panel inventory-panel">
       <div class="section-header stock-header">
         <div>
           <p class="section-kicker">Inventory Control</p>
-          <h2>Current Stock</h2>
+          <h2>Current Stock Overview</h2>
+          <p class="panel-description">Each product appears once. Quantities from all matching entries are combined automatically.</p>
         </div>
 
-        <div class="search-box">
-          <span>⌕</span>
-          <input id="stockSearch" type="search"
-            placeholder="Search product..." autocomplete="off">
-          <button id="clearStockSearch" type="button" class="clear-search hidden">×</button>
+        <div class="inventory-toolbar">
+          <div class="search-box">
+            <span>⌕</span>
+            <input id="stockSearch" type="search" placeholder="Search product..." autocomplete="off">
+            <button id="clearStockSearch" type="button" class="clear-search hidden">×</button>
+          </div>
         </div>
       </div>
 
-      <div class="table-wrap">
-        <table>
+      <div class="inventory-summary-note">
+        <span>✓</span> <strong>Duplicate product names are combined.</strong> For example, 60X40X40 and 60x40x40 are treated as one inventory item.
+      </div>
+
+      <div class="table-wrap inventory-wrap">
+        <table class="inventory-table">
           <thead>
             <tr>
               <th>Product</th>
@@ -145,12 +151,13 @@
               <th>Issued</th>
               <th>Current Stock</th>
               <th>Minimum</th>
+              <th>Stock Level</th>
               <th>Status</th>
-              <th>Set Level</th>
+              <th>History</th>
             </tr>
           </thead>
           <tbody id="stockTableBody">
-            <tr><td colspan="7">Loading stock…</td></tr>
+            <tr><td colspan="8">Loading stock…</td></tr>
           </tbody>
         </table>
       </div>
